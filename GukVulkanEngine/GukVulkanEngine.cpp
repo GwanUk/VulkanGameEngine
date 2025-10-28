@@ -768,8 +768,16 @@ class GukVulkanEngine
             throw std::runtime_error("failed to create pipeline layout!");
         }
 
+        VkPipelineRenderingCreateInfo pipelineRenderingInfo{};
+        pipelineRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        pipelineRenderingInfo.colorAttachmentCount = 1;
+        pipelineRenderingInfo.pColorAttachmentFormats = &swapChainImageFormat;
+        pipelineRenderingInfo.depthAttachmentFormat = findDepthFormat();
+        pipelineRenderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.pNext = &pipelineRenderingInfo;
         pipelineInfo.stageCount = 2;
         pipelineInfo.pStages = shaderStages;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -781,7 +789,7 @@ class GukVulkanEngine
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.renderPass = VK_NULL_HANDLE;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
         pipelineInfo.basePipelineIndex = -1;
@@ -1330,21 +1338,69 @@ class GukVulkanEngine
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = swapChainExtent;
+        {
+            VkImageMemoryBarrier2 colorBarrier{};
+            colorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            colorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            colorBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+            colorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            colorBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            colorBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            colorBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            colorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            colorBarrier.image = swapChainImages[imageIndex];
+            colorBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{0.f, 0.f, 0.f, 1.f}};
-        clearValues[1].depthStencil = {1.f, 0};
+            VkImageMemoryBarrier2 depthStencilBarrier{};
+            depthStencilBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            depthStencilBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            depthStencilBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+            depthStencilBarrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                                               VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            depthStencilBarrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            depthStencilBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            depthStencilBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthStencilBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            depthStencilBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            depthStencilBarrier.image = depthImage;
+            depthStencilBarrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
 
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+            std::array<VkImageMemoryBarrier2, 2> imageBarriers{colorBarrier, depthStencilBarrier};
+            VkDependencyInfo dependencyInfo{};
+            dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            dependencyInfo.imageMemoryBarrierCount = imageBarriers.size();
+            dependencyInfo.pImageMemoryBarriers = imageBarriers.data();
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+        }
+
+        VkRenderingAttachmentInfo colorAttachment{};
+        colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        colorAttachment.imageView = swapChainImageViews[imageIndex];
+        colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.clearValue.color = {0.f, 0.f, 0.f, 1.f};
+
+        VkRenderingAttachmentInfo depthStecilAttachment{};
+        depthStecilAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        depthStecilAttachment.imageView = depthImageView;
+        depthStecilAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthStecilAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthStecilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthStecilAttachment.clearValue.depthStencil = {1.f, 0};
+
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = {{0, 0}, {swapChainExtent.width, swapChainExtent.height}};
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachments = &colorAttachment;
+        renderingInfo.pDepthAttachment = &depthStecilAttachment;
+
+        vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
@@ -1373,7 +1429,29 @@ class GukVulkanEngine
 
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-        vkCmdEndRenderPass(commandBuffer);
+        vkCmdEndRendering(commandBuffer);
+
+        {
+            VkImageMemoryBarrier2 colorBarrier{};
+            colorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            colorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            colorBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            colorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            colorBarrier.dstAccessMask = VK_ACCESS_2_NONE;
+            colorBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            colorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            colorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            colorBarrier.image = swapChainImages[imageIndex];
+            colorBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+            VkDependencyInfo dependencyInfo{};
+            dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            dependencyInfo.imageMemoryBarrierCount = 1;
+            dependencyInfo.pImageMemoryBarriers = &colorBarrier;
+
+            vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+        }
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
