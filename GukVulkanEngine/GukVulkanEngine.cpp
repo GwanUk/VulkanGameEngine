@@ -155,6 +155,7 @@ class GukVulkanEngine
     VkSurfaceKHR surface{};
 
     VkPhysicalDevice physicalDevice{VK_NULL_HANDLE};
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
     VkDevice device{};
 
     VkQueue graphicsQueue{};
@@ -171,6 +172,10 @@ class GukVulkanEngine
     VkPipeline graphicsPipeline{};
 
     VkCommandPool commandPool{};
+
+    VkImage colorImage{};
+    VkDeviceMemory colorImageMemory{};
+    VkImageView colorImageView{};
 
     VkImage depthImage{};
     VkDeviceMemory depthImageMemory{};
@@ -232,6 +237,7 @@ class GukVulkanEngine
         createDescriptorSetLayout();
         createGraphicsPipeline();
         createCommandPool();
+        createColorResources();
         createDepthResources();
         createTextureImage();
         createTextureImageView();
@@ -260,6 +266,10 @@ class GukVulkanEngine
         vkDestroyImageView(device, depthImageView, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
         vkFreeMemory(device, depthImageMemory, nullptr);
+
+        vkDestroyImageView(device, colorImageView, nullptr);
+        vkDestroyImage(device, colorImage, nullptr);
+        vkFreeMemory(device, colorImageMemory, nullptr);
 
         for (auto imageView : swapChainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
@@ -333,6 +343,7 @@ class GukVulkanEngine
 
         createSwapChain();
         createImageViews();
+        createColorResources();
         createDepthResources();
     }
 
@@ -425,6 +436,7 @@ class GukVulkanEngine
         for (const auto& device : devices) {
             if (isDeviceSuitsble(device)) {
                 physicalDevice = device;
+                msaaSamples = getMaxUsableSampleCount();
                 break;
             }
         }
@@ -638,7 +650,7 @@ class GukVulkanEngine
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampling.rasterizationSamples = msaaSamples;
         multisampling.minSampleShading = 1.f;
         multisampling.pSampleMask = nullptr;
         multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -746,11 +758,22 @@ class GukVulkanEngine
         }
     }
 
+    void createColorResources()
+    {
+        VkFormat colorFormat = swapChainImageFormat;
+
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+        colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    }
+
     void createDepthResources()
     {
         VkFormat depthFormat = findDepthFormat();
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, depthFormat,
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat,
                     VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -811,7 +834,7 @@ class GukVulkanEngine
 
         stbi_image_free(pixels);
 
-        createImage(texWidth, texHeight, mipLevels, VK_FORMAT_R8G8B8A8_SRGB,
+        createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB,
                     VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                         VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -913,6 +936,23 @@ class GukVulkanEngine
         endSingleTimeCommands(commandBuffer);
     }
 
+    VkSampleCountFlagBits getMaxUsableSampleCount()
+    {
+        VkPhysicalDeviceProperties physicalDeviceProperties;
+        vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+
+        VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts &
+                                    physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+        if (counts & VK_SAMPLE_COUNT_4_BIT) {
+            return VK_SAMPLE_COUNT_4_BIT;
+        }
+        if (counts & VK_SAMPLE_COUNT_2_BIT) {
+            return VK_SAMPLE_COUNT_2_BIT;
+        }
+
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+
     void createTextureImageView()
     {
         textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB,
@@ -973,9 +1013,10 @@ class GukVulkanEngine
         return imageView;
     }
 
-    void createImage(uint32_t width, uint32_t heigt, uint32_t mipLevels, VkFormat format,
-                     VkImageTiling tiling, VkImageUsageFlags usage,
-                     VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    void createImage(uint32_t width, uint32_t heigt, uint32_t mipLevels,
+                     VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+                     VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image,
+                     VkDeviceMemory& imageMemory)
     {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -990,7 +1031,7 @@ class GukVulkanEngine
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageInfo.usage = usage;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.samples = numSamples;
         imageInfo.flags = 0;
 
         if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
@@ -1333,22 +1374,39 @@ class GukVulkanEngine
         }
 
         {
-            VkImageMemoryBarrier2 colorBarrier{};
-            colorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            colorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            colorBarrier.srcAccessMask = VK_ACCESS_2_NONE;
-            colorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            colorBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            colorBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            colorBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            colorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            colorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            colorBarrier.image = swapChainImages[imageIndex];
-            colorBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            colorBarrier.subresourceRange.baseMipLevel = 0;
-            colorBarrier.subresourceRange.levelCount = 1;
-            colorBarrier.subresourceRange.baseArrayLayer = 0;
-            colorBarrier.subresourceRange.layerCount = 1;
+            VkImageMemoryBarrier2 msaaColorBarrier{};
+            msaaColorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            msaaColorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            msaaColorBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+            msaaColorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            msaaColorBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            msaaColorBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            msaaColorBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            msaaColorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            msaaColorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            msaaColorBarrier.image = colorImage;
+            msaaColorBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            msaaColorBarrier.subresourceRange.baseMipLevel = 0;
+            msaaColorBarrier.subresourceRange.levelCount = 1;
+            msaaColorBarrier.subresourceRange.baseArrayLayer = 0;
+            msaaColorBarrier.subresourceRange.layerCount = 1;
+
+            VkImageMemoryBarrier2 resolveColorBarrier{};
+            resolveColorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            resolveColorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            resolveColorBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+            resolveColorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            resolveColorBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            resolveColorBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            resolveColorBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            resolveColorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveColorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveColorBarrier.image = swapChainImages[imageIndex];
+            resolveColorBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            resolveColorBarrier.subresourceRange.baseMipLevel = 0;
+            resolveColorBarrier.subresourceRange.levelCount = 1;
+            resolveColorBarrier.subresourceRange.baseArrayLayer = 0;
+            resolveColorBarrier.subresourceRange.layerCount = 1;
 
             VkImageMemoryBarrier2 depthStencilBarrier{};
             depthStencilBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -1369,10 +1427,11 @@ class GukVulkanEngine
             depthStencilBarrier.subresourceRange.baseArrayLayer = 0;
             depthStencilBarrier.subresourceRange.layerCount = 1;
 
-            std::array<VkImageMemoryBarrier2, 2> imageBarriers{colorBarrier, depthStencilBarrier};
+            std::array<VkImageMemoryBarrier2, 3> imageBarriers{
+                msaaColorBarrier, resolveColorBarrier, depthStencilBarrier};
             VkDependencyInfo dependencyInfo{};
             dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-            dependencyInfo.imageMemoryBarrierCount = imageBarriers.size();
+            dependencyInfo.imageMemoryBarrierCount = static_cast<uint32_t>(imageBarriers.size());
             dependencyInfo.pImageMemoryBarriers = imageBarriers.data();
 
             vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
@@ -1380,11 +1439,14 @@ class GukVulkanEngine
 
         VkRenderingAttachmentInfo colorAttachment{};
         colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        colorAttachment.imageView = swapChainImageViews[imageIndex];
+        colorAttachment.imageView = colorImageView;
         colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachment.clearValue.color = {0.f, 0.f, 0.f, 1.f};
+        colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        colorAttachment.resolveImageView = swapChainImageViews[imageIndex];
+        colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkRenderingAttachmentInfo depthStecilAttachment{};
         depthStecilAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -1434,27 +1496,27 @@ class GukVulkanEngine
         vkCmdEndRendering(commandBuffer);
 
         {
-            VkImageMemoryBarrier2 colorBarrier{};
-            colorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            colorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            colorBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            colorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-            colorBarrier.dstAccessMask = VK_ACCESS_2_NONE;
-            colorBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            colorBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            colorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            colorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            colorBarrier.image = swapChainImages[imageIndex];
-            colorBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            colorBarrier.subresourceRange.baseMipLevel = 0;
-            colorBarrier.subresourceRange.levelCount = 1;
-            colorBarrier.subresourceRange.baseArrayLayer = 0;
-            colorBarrier.subresourceRange.layerCount = 1;
+            VkImageMemoryBarrier2 presentBarrier{};
+            presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            presentBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            presentBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            presentBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            presentBarrier.dstAccessMask = VK_ACCESS_2_NONE;
+            presentBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            presentBarrier.image = swapChainImages[imageIndex];
+            presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            presentBarrier.subresourceRange.baseMipLevel = 0;
+            presentBarrier.subresourceRange.levelCount = 1;
+            presentBarrier.subresourceRange.baseArrayLayer = 0;
+            presentBarrier.subresourceRange.layerCount = 1;
 
             VkDependencyInfo dependencyInfo{};
             dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
             dependencyInfo.imageMemoryBarrierCount = 1;
-            dependencyInfo.pImageMemoryBarriers = &colorBarrier;
+            dependencyInfo.pImageMemoryBarriers = &presentBarrier;
 
             vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
         }
