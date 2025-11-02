@@ -1376,11 +1376,11 @@ class GukVulkanEngine
         {
             VkImageMemoryBarrier2 msaaColorBarrier{};
             msaaColorBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            msaaColorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            msaaColorBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+            msaaColorBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            msaaColorBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
             msaaColorBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             msaaColorBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            msaaColorBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            msaaColorBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             msaaColorBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             msaaColorBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             msaaColorBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -1410,13 +1410,11 @@ class GukVulkanEngine
 
             VkImageMemoryBarrier2 depthStencilBarrier{};
             depthStencilBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            depthStencilBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            depthStencilBarrier.srcAccessMask = VK_ACCESS_2_NONE;
-            depthStencilBarrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                                               VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            depthStencilBarrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                                                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            depthStencilBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            depthStencilBarrier.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            depthStencilBarrier.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            depthStencilBarrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+            depthStencilBarrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            depthStencilBarrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             depthStencilBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             depthStencilBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             depthStencilBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -1453,7 +1451,7 @@ class GukVulkanEngine
         depthStecilAttachment.imageView = depthImageView;
         depthStecilAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         depthStecilAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthStecilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthStecilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthStecilAttachment.clearValue.depthStencil = {1.f, 0};
 
         VkRenderingInfo renderingInfo{};
