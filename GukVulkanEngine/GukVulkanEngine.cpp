@@ -592,8 +592,8 @@ class GukVulkanEngine
 
     void createGraphicsPipeline()
     {
-        auto vertShadercode = readFile("shaders/vert.spv");
-        auto fragShadercode = readFile("shaders/frag.spv");
+        auto vertShadercode = readFile("shaders/test.vert.spv");
+        auto fragShadercode = readFile("shaders/test.frag.spv");
 
         VkShaderModule vertShaderModule = createShaderModule(vertShadercode);
         VkShaderModule fragShaderModule = createShaderModule(fragShadercode);
