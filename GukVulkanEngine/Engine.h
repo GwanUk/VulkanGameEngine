@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DataStructures.h"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -8,6 +10,8 @@
 
 namespace guk {
 
+class GuiRenderer;
+
 class Engine
 {
   public:
@@ -15,6 +19,38 @@ class Engine
     ~Engine();
 
     void run();
+
+    uint32_t getMemoryTypeIndex(uint32_t memoryType, VkMemoryPropertyFlags memoryProperty) const;
+
+    void createBuffer(VkBuffer& buffer, VkBufferUsageFlags bufferUsageFlags,
+                      VkDeviceMemory& bufferMemory, VkMemoryPropertyFlags memoryPropertyFlags,
+                      VkDeviceSize dataSize);
+
+    void createTexture(VkImage& textureImage, VkDeviceMemory& textureImageMemory,
+                       VkImageView& textureImageView, VkSampler& textureSampler,
+                       unsigned char* pixelData, int width, int height, int channels, bool srgb,
+                       bool mipmap);
+
+    VkShaderModule createShaderModule(const std::string& spv) const;
+
+    MouseState mouseState_{};
+
+    VkDevice device_{};
+    VkPipelineCache pipelineCache_{};
+    VkQueue queue_{};
+
+    VkDescriptorPool descriptorPool_{};
+
+    VkFormat swapchainImageFormat_{};
+    VkExtent2D swapchainImageExtent_{};
+    std::vector<VkImageView> swapChainImageViews_;
+
+    std::vector<VkCommandBuffer> commandBuffers_;
+
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2};
+    uint32_t currentFrame_{};
+    uint32_t currentSemaphore_{};
+    uint32_t currentImage_{};
 
   private:
     GLFWwindow* window_{};
@@ -27,29 +63,21 @@ class Engine
     VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties_{};
 
     uint32_t queueFaimlyIndex_{uint32_t(-1)};
-    VkDevice device_{};
 
-    VkQueue queue_{};
     VkCommandPool commandPool_{};
-    std::vector<VkCommandBuffer> commandBuffers_;
     VkFormat depthStencilFormat_{};
     VkSampleCountFlagBits sampleCount_{};
-    VkPipelineCache pipelineCache_{};
 
     VkSurfaceKHR surface_{};
     VkSwapchainKHR swapchain_{};
-    VkExtent2D swapchainImageExtent_{};
-    VkFormat swapchainImageFormat_{};
     uint32_t swapchainImageCount_{};
     std::vector<VkImage> swapchainImages_;
-    std::vector<VkImageView> swapChainImageViews_;
 
-    const uint32_t MAX_FRAMES_IN_FLIGHT{2};
     std::vector<VkFence> inFlightFences_;
     std::vector<VkSemaphore> imageAvailableSemaphores_;
     std::vector<VkSemaphore> renderFinishedSemaphores_;
-    uint32_t currentFrame_{};
-    uint32_t currentSemaphore_{};
+
+    GuiRenderer* guiRenderer_;
 
     VkBuffer vertexBuffer_{};
     VkDeviceMemory vertexBufferMemory_{};
@@ -73,18 +101,24 @@ class Engine
     VkDeviceMemory depthStencilAttahcmentMemory_{};
     VkImageView depthStencilAttahcmentView_{};
 
-    VkDescriptorPool descriptorPool_{};
     VkDescriptorSetLayout descriptorSetLayout_{};
     std::vector<VkDescriptorSet> descriptorSets_{};
     VkPipelineLayout pipelineLayout_{};
     VkPipeline pipeline_{};
 
-    VkCommandBuffer beginCommand();
-    void submitAndWait(VkCommandBuffer commandBuffer);
+    VkCommandBuffer beginCommand() const;
+    void submitAndWait(VkCommandBuffer commandBuffer) const;
 
-    uint32_t getMemoryTypeIndex(uint32_t memoryType, VkMemoryPropertyFlags memoryProperty);
+    void createBuffer(VkBuffer& buffer, VkBufferUsageFlags bufferUsageFlags,
+                      VkDeviceMemory& bufferMemory, VkDeviceSize dataSize, const void* data);
 
-    VkShaderModule createShaderModuleFromSpvfile(const std::string& spvFilename);
+    void createAttachment(VkImage& image, VkFormat format, VkImageUsageFlags imageUsageFlags,
+                          VkDeviceMemory& imageMemory, VkMemoryPropertyFlags memoryPropertyFlags,
+                          VkImageView& imageView, VkImageAspectFlags imageAspectFlags);
+
+    void createTexture(VkImage& textureImage, VkDeviceMemory& textureImageMemory,
+                       VkImageView& textureImageView, VkSampler& textureSampler,
+                       const std::string& image, bool srgb, bool mipmap);
 
     void recreateSwapChain();
     void updateUniformBuffer(uint32_t currentImage);
@@ -101,14 +135,8 @@ class Engine
     void createPipelineCache();
 
     void createSwapChain();
-
     void createSyncObjects();
-    void createVertexBuffer();
-    void createIndexBuffer();
-    void createUniformBuffers();
-    void createTextureImage();
-    void createColorAttahcment();
-    void createDepthStencilAttachment();
+    void createResources();
 
     void createDescriptorPool();
     void createDescriptorSetLayout();
@@ -116,7 +144,7 @@ class Engine
     void createPipelineLayout();
     void createPipeline();
 
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void recordCommandBuffer();
     void drawFrame();
 };
 

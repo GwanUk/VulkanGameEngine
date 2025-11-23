@@ -134,18 +134,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="BufferObject.cpp" />
+    <ClCompile Include="DataStructures.cpp" />
     <ClCompile Include="Engine.cpp" />
+    <ClCompile Include="GuiRenderer.cpp" />
     <ClCompile Include="GukVulkanEngine.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="Util.cpp" />
+    <ClCompile Include="Logger.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="BufferObject.h" />
+    <ClInclude Include="DataStructures.h" />
     <ClInclude Include="Engine.h" />
-    <ClInclude Include="Util.h" />
+    <ClInclude Include="GuiRenderer.h" />
+    <ClInclude Include="Logger.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\imgui.frag" />
+    <None Include="shaders\imgui.vert" />
     <None Include="shaders\test.frag" />
     <None Include="shaders\test.vert" />
   </ItemGroup>
