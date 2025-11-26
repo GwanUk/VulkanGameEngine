@@ -1,17 +1,8 @@
 #include "Logger.h"
 
-#include <sstream>
-
 namespace guk {
 
-void vkCheck(VkResult result, const char* file, int line)
-{
-    if (result != VK_SUCCESS) {
-        exitLog("[Error] {} {} {}", getResultString(result), file, line);
-    }
-}
-
-std::string getResultString(VkResult errorCode)
+static std::string getResultString(VkResult errorCode)
 {
     switch (errorCode) {
     case VK_SUCCESS:
@@ -108,6 +99,13 @@ std::string getResultString(VkResult errorCode)
         return "VK_RESULT_MAX_ENUM";
     default:
         return "UNKNOWN_ERROR";
+    }
+}
+
+void vkCheck(VkResult result, const char* file, int line)
+{
+    if (result != VK_SUCCESS) {
+        exitLog("[Error] {} {} {}", getResultString(result), file, line);
     }
 }
 

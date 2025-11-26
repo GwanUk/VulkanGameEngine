@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine.h"
-#include <array>
+#include "Image2D.h"
 
 namespace guk {
 
@@ -11,17 +11,14 @@ class GuiRenderer
     GuiRenderer(Engine& engine);
     ~GuiRenderer();
 
-    void update();
-    void draw();
+    void update(uint32_t frameIdx);
+    void draw(VkCommandBuffer cmd, uint32_t frameIdx);
 
   private:
     Engine& engine_;
     float scale_{1.4f};
 
-    VkImage textureImage_{};
-    VkDeviceMemory textureMemory_{};
-    VkImageView textureView_{};
-    VkSampler textureSampler_{};
+    Image2D fontTexture_;
 
     VkDescriptorSetLayout descriptorSetLayout_{};
     VkDescriptorSet descriptorSet_{};

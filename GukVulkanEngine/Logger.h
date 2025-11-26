@@ -11,7 +11,6 @@
 namespace guk {
 
 void vkCheck(VkResult result, const char* file, int line);
-std::string getResultString(VkResult errorCode);
 
 template <typename... Args>
 static void log(std::format_string<Args...> fmt, Args&&... args)

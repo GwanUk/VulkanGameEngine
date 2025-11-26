@@ -1,12 +1,10 @@
 #include "GuiRenderer.h"
-#include "Logger.h"
 
 #include <imgui.h>
-#include <array>
 
 namespace guk {
 
-GuiRenderer::GuiRenderer(Engine& engine) : engine_(engine)
+GuiRenderer::GuiRenderer(Engine& engine) : engine_(engine), fontTexture_{engine_}
 {
     init();
     createDescriptorSetLayout();
@@ -21,11 +19,6 @@ GuiRenderer::~GuiRenderer()
     vkDestroyPipelineLayout(engine_.device_, pipelineLayout_, nullptr);
     vkDestroyDescriptorSetLayout(engine_.device_, descriptorSetLayout_, nullptr);
 
-    vkDestroySampler(engine_.device_, textureSampler_, nullptr);
-    vkDestroyImageView(engine_.device_, textureView_, nullptr);
-    vkDestroyImage(engine_.device_, textureImage_, nullptr);
-    vkFreeMemory(engine_.device_, textureMemory_, nullptr);
-
     for (size_t i = 0; i < engine_.MAX_FRAMES_IN_FLIGHT; i++) {
         vkUnmapMemory(engine_.device_, vertexBufferMemorys_[i]);
         vkDestroyBuffer(engine_.device_, vertexBuffers_[i], nullptr);
@@ -37,37 +30,8 @@ GuiRenderer::~GuiRenderer()
     }
 }
 
-void GuiRenderer::update()
+void GuiRenderer::update(uint32_t frameIdx)
 {
-    ImGuiIO& io = ImGui::GetIO();
-
-    // Update ImGui IO state
-    io.DisplaySize = ImVec2(float(engine_.swapchainImageExtent_.width),
-                            float(engine_.swapchainImageExtent_.height));
-    io.MousePos = ImVec2(engine_.mouseState_.position.x, engine_.mouseState_.position.y);
-    io.MouseDown[0] = engine_.mouseState_.buttons.left;
-    io.MouseDown[1] = engine_.mouseState_.buttons.right;
-    io.MouseDown[2] = engine_.mouseState_.buttons.middle;
-
-    // Begin GUI frame
-    ImGui::NewFrame();
-
-    // Camera info window
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_FirstUseEver);
-
-    if (ImGui::Begin("Camera Control")) {
-        ImGui::Separator();
-        ImGui::Text("Controls:");
-        ImGui::Text("Mouse: Look around");
-        ImGui::Text("WASD: Move");
-        ImGui::Text("QE: Up/Down");
-        ImGui::Text("F2: Toggle camera mode");
-    }
-    ImGui::End();
-
-    ImGui::Render();
-
     ImDrawData* drawData = ImGui::GetDrawData();
     if (!drawData || !drawData->TotalVtxCount || !drawData->TotalIdxCount) {
         return;
@@ -76,24 +40,24 @@ void GuiRenderer::update()
     VkDeviceSize vertexBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
     VkDeviceSize indexBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
 
-    if (vertexBuffers_[engine_.currentFrame_] != VK_NULL_HANDLE ||
-        vertexBufferSize > vertexAllocationSizes_[engine_.currentFrame_]) {
+    if (vertexBuffers_[frameIdx] != VK_NULL_HANDLE ||
+        vertexBufferSize > vertexAllocationSizes_[frameIdx]) {
 
         VkDeviceSize newSize = std::max(static_cast<VkDeviceSize>(vertexBufferSize * 1.5f),
                                         static_cast<VkDeviceSize>(512 * sizeof(ImDrawVert)));
         createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, newSize);
     }
 
-    if (indexBuffers_[engine_.currentFrame_] != VK_NULL_HANDLE ||
-        indexBufferSize > indexAllocationSizes_[engine_.currentFrame_]) {
+    if (indexBuffers_[frameIdx] != VK_NULL_HANDLE ||
+        indexBufferSize > indexAllocationSizes_[frameIdx]) {
 
         VkDeviceSize newSize = std::max(static_cast<VkDeviceSize>(vertexBufferSize * 1.5f),
                                         static_cast<VkDeviceSize>(1024 * sizeof(ImDrawIdx)));
         createBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, newSize);
     }
 
-    ImDrawVert* vtxDst = (ImDrawVert*)vertexMappeds_[engine_.currentFrame_];
-    ImDrawIdx* idxDst = (ImDrawIdx*)indexMappeds_[engine_.currentFrame_];
+    ImDrawVert* vtxDst = (ImDrawVert*)vertexMappeds_[frameIdx];
+    ImDrawIdx* idxDst = (ImDrawIdx*)indexMappeds_[frameIdx];
 
     for (int i = 0; i < drawData->CmdListsCount; i++) {
         const ImDrawList* cmdList = drawData->CmdLists[i];
@@ -105,23 +69,21 @@ void GuiRenderer::update()
 
     std::array<VkMappedMemoryRange, 2> mappedMemoryRanges{};
     mappedMemoryRanges[0].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    mappedMemoryRanges[0].memory = vertexBufferMemorys_[engine_.currentFrame_];
+    mappedMemoryRanges[0].memory = vertexBufferMemorys_[frameIdx];
     mappedMemoryRanges[0].offset = 0;
-    mappedMemoryRanges[0].size = vertexAllocationSizes_[engine_.currentFrame_];
+    mappedMemoryRanges[0].size = vertexAllocationSizes_[frameIdx];
     mappedMemoryRanges[1].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    mappedMemoryRanges[1].memory = indexBufferMemorys_[engine_.currentFrame_];
+    mappedMemoryRanges[1].memory = indexBufferMemorys_[frameIdx];
     mappedMemoryRanges[1].offset = 0;
-    mappedMemoryRanges[1].size = indexAllocationSizes_[engine_.currentFrame_];
+    mappedMemoryRanges[1].size = indexAllocationSizes_[frameIdx];
 
     VK_CHECK(vkFlushMappedMemoryRanges(engine_.device_,
                                        static_cast<uint32_t>(mappedMemoryRanges.size()),
                                        mappedMemoryRanges.data()));
 }
 
-void GuiRenderer::draw()
+void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
 {
-    VkCommandBuffer commandBuffer{engine_.commandBuffers_[engine_.currentFrame_]};
-
     VkRenderingAttachmentInfo renderingAttachmentInfo{};
     renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     renderingAttachmentInfo.imageView = engine_.swapChainImageViews_[engine_.currentImage_];
@@ -141,7 +103,7 @@ void GuiRenderer::draw()
         return;
     }
 
-    vkCmdBeginRendering(commandBuffer, &renderingInfo);
+    vkCmdBeginRendering(cmd, &renderingInfo);
 
     VkViewport viewport{};
     viewport.x = 0.f;
@@ -150,23 +112,22 @@ void GuiRenderer::draw()
     viewport.height = static_cast<float>(engine_.swapchainImageExtent_.height);
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
                             &descriptorSet_, 0, NULL);
 
     ImGuiIO& io = ImGui::GetIO();
     PushConstants pc{};
     pc.scale = glm::vec2(2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y);
     pc.translate = glm::vec2(-1.0f);
-    vkCmdPushConstants(commandBuffer, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(PushConstants), &pc);
+    vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
+                       &pc);
 
     VkDeviceSize offsets[1] = {0};
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers_[engine_.currentFrame_], offsets);
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffers_[engine_.currentFrame_], 0,
-                         VK_INDEX_TYPE_UINT16);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffers_[frameIdx], offsets);
+    vkCmdBindIndexBuffer(cmd, indexBuffers_[frameIdx], 0, VK_INDEX_TYPE_UINT16);
 
     int32_t vertexOffset = 0;
     int32_t indexOffset = 0;
@@ -180,15 +141,15 @@ void GuiRenderer::draw()
             scissorRect.offset.y = std::max((int32_t)(pcmd->ClipRect.y), 0);
             scissorRect.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
             scissorRect.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y);
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissorRect);
-            vkCmdDrawIndexed(commandBuffer, pcmd->ElemCount, 1, indexOffset, vertexOffset, 0);
+            vkCmdSetScissor(cmd, 0, 1, &scissorRect);
+            vkCmdDrawIndexed(cmd, pcmd->ElemCount, 1, indexOffset, vertexOffset, 0);
             indexOffset += pcmd->ElemCount;
         }
 
         vertexOffset += cmdList->VtxBuffer.Size;
     }
 
-    vkCmdEndRendering(commandBuffer);
+    vkCmdEndRendering(cmd);
 }
 
 void GuiRenderer::init()
@@ -234,8 +195,8 @@ void GuiRenderer::init()
         exitLog("Failed to load font data from: {}", font);
     }
 
-    engine_.createTexture(textureImage_, textureMemory_, textureView_, textureSampler_, data, width,
-                          height, 4, false, false);
+    fontTexture_.createTexture(data, width, height, 4, VK_FORMAT_R8G8B8A8_UNORM,
+                               VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 }
 
 void GuiRenderer::createDescriptorSetLayout()
@@ -268,8 +229,8 @@ void GuiRenderer::allocateDescriptorSets()
 
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = textureView_;
-    imageInfo.sampler = textureSampler_;
+    imageInfo.imageView = fontTexture_.view_;
+    imageInfo.sampler = fontTexture_.sampler_;
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
