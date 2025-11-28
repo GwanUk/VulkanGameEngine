@@ -43,5 +43,7 @@ class Image2D
 
     void createSampler();
     void generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels) const;
+
+    VkImageAspectFlags aspect() const;
 };
 } // namespace guk

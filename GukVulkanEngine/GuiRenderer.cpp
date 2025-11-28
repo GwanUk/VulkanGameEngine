@@ -82,18 +82,17 @@ void GuiRenderer::update(uint32_t frameIdx)
                                        mappedMemoryRanges.data()));
 }
 
-void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
+void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTarget)
 {
     VkRenderingAttachmentInfo renderingAttachmentInfo{};
     renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfo.imageView = engine_.swapChainImageViews_[engine_.currentImage_];
+    renderingAttachmentInfo.imageView = renderTarget.view_;
     renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
     VkRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-    renderingInfo.renderArea = {0, 0, engine_.swapchainImageExtent_.width,
-                                engine_.swapchainImageExtent_.height};
+    renderingInfo.renderArea = {0, 0, renderTarget.extent_.width, renderTarget.extent_.height};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &renderingAttachmentInfo;
@@ -108,8 +107,8 @@ void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
     VkViewport viewport{};
     viewport.x = 0.f;
     viewport.y = 0.f;
-    viewport.width = static_cast<float>(engine_.swapchainImageExtent_.width);
-    viewport.height = static_cast<float>(engine_.swapchainImageExtent_.height);
+    viewport.width = static_cast<float>(renderTarget.extent_.width);
+    viewport.height = static_cast<float>(renderTarget.extent_.height);
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -380,7 +379,7 @@ void GuiRenderer::createPipeline()
     VkPipelineRenderingCreateInfo pipelineRenderingCI{};
     pipelineRenderingCI.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     pipelineRenderingCI.colorAttachmentCount = 1;
-    pipelineRenderingCI.pColorAttachmentFormats = &engine_.swapchainImageFormat_;
+    pipelineRenderingCI.pColorAttachmentFormats = &engine_.swapchainImages_[0].format_;
     pipelineRenderingCI.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipelineRenderingCI.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
@@ -413,17 +412,17 @@ void GuiRenderer::createPipeline()
 void GuiRenderer::createBuffer(VkBufferUsageFlagBits usage, VkDeviceSize size)
 {
     VkBuffer& buffer = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                           ? vertexBuffers_[engine_.currentFrame_]
-                           : indexBuffers_[engine_.currentFrame_];
+                           ? vertexBuffers_[engine_.frameIdx_]
+                           : indexBuffers_[engine_.frameIdx_];
     VkDeviceMemory& memory = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                                 ? vertexBufferMemorys_[engine_.currentFrame_]
-                                 : indexBufferMemorys_[engine_.currentFrame_];
+                                 ? vertexBufferMemorys_[engine_.frameIdx_]
+                                 : indexBufferMemorys_[engine_.frameIdx_];
     void*& mapped = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                        ? vertexMappeds_[engine_.currentFrame_]
-                        : indexMappeds_[engine_.currentFrame_];
+                        ? vertexMappeds_[engine_.frameIdx_]
+                        : indexMappeds_[engine_.frameIdx_];
     VkDeviceSize& allocationSize = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                                       ? vertexAllocationSizes_[engine_.currentFrame_]
-                                       : indexAllocationSizes_[engine_.currentFrame_];
+                                       ? vertexAllocationSizes_[engine_.frameIdx_]
+                                       : indexAllocationSizes_[engine_.frameIdx_];
 
     if (mapped) {
         vkUnmapMemory(engine_.device_, memory);

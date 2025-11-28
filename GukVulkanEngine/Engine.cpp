@@ -75,7 +75,7 @@ Engine::~Engine()
     delete guiRenderer_;
     delete sceneRenderer_;
 
-    for (uint32_t i = 0; i < swapchainImageCount_; i++) {
+    for (uint32_t i = 0; i < swapchainImages_.size(); i++) {
         vkDestroySemaphore(device_, imageAvailableSemaphores_[i], nullptr);
         vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
     }
@@ -86,9 +86,7 @@ Engine::~Engine()
 
     vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
 
-    for (const auto& swapChainImageView : swapChainImageViews_) {
-        vkDestroyImageView(device_, swapChainImageView, nullptr);
-    }
+    swapchainImages_.clear();
     vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     vkDestroySurfaceKHR(instance_, surface_, nullptr);
 
@@ -110,10 +108,7 @@ void Engine::run()
 {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
-
         updateGui();
-        sceneRenderer_->updateUniform(currentFrame_);
-
         drawFrame();
     }
 
@@ -506,115 +501,93 @@ void Engine::selectSmapleCount()
 
 void Engine::createPipelineCache()
 {
-    VkPipelineCacheCreateInfo pipelineCacheCreateInfo{};
-    pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-    VK_CHECK(vkCreatePipelineCache(device_, &pipelineCacheCreateInfo, nullptr, &pipelineCache_));
+    VkPipelineCacheCreateInfo pipelineCacheCI{};
+    pipelineCacheCI.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    VK_CHECK(vkCreatePipelineCache(device_, &pipelineCacheCI, nullptr, &pipelineCache_));
 }
 
 void Engine::createSwapChain()
 {
     VkSwapchainKHR oldSwapchain{swapchain_};
 
-    VkSurfaceCapabilitiesKHR surfaceCapabiliteis{};
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice_, surface_, &surfaceCapabiliteis);
+    VkSurfaceCapabilitiesKHR capabiliteis{};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice_, surface_, &capabiliteis);
 
-    swapchainImageExtent_ = surfaceCapabiliteis.currentExtent;
-    if (swapchainImageExtent_.width == uint32_t(-1)) {
+    VkExtent2D extent = capabiliteis.currentExtent;
+    if (extent.width == uint32_t(-1)) {
         int width{}, height{};
         glfwGetFramebufferSize(window_, &width, &height);
-        swapchainImageExtent_.width =
-            std::clamp(static_cast<uint32_t>(width), surfaceCapabiliteis.minImageExtent.width,
-                       surfaceCapabiliteis.maxImageExtent.width);
-        swapchainImageExtent_.height =
-            std::clamp(static_cast<uint32_t>(height), surfaceCapabiliteis.minImageExtent.height,
-                       surfaceCapabiliteis.maxImageExtent.height);
+        extent.width = std::clamp(static_cast<uint32_t>(width), capabiliteis.minImageExtent.width,
+                                  capabiliteis.maxImageExtent.width);
+        extent.height =
+            std::clamp(static_cast<uint32_t>(height), capabiliteis.minImageExtent.height,
+                       capabiliteis.maxImageExtent.height);
     }
 
-    uint32_t surfaceFormatsCount{};
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &surfaceFormatsCount, nullptr);
-    std::vector<VkSurfaceFormatKHR> surfaceFormats(surfaceFormatsCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &surfaceFormatsCount,
-                                         surfaceFormats.data());
-    for (uint32_t i = 0; i < surfaceFormatsCount; i++) {
-        if (surfaceFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
-            surfaceFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            swapchainImageFormat_ = surfaceFormats[i].format;
+    uint32_t formatsCount{};
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &formatsCount, nullptr);
+    std::vector<VkSurfaceFormatKHR> formats(formatsCount);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &formatsCount, formats.data());
+
+    VkFormat format{VK_FORMAT_UNDEFINED};
+    for (uint32_t i = 0; i < formatsCount; i++) {
+        if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
+            formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            format = formats[i].format;
             break;
         }
-
-        if (i == surfaceFormatsCount - 1) {
-            exitLog("surface format requestd, but not available!");
-        }
     }
 
-    uint32_t presentModeCount{};
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &presentModeCount,
-                                              nullptr);
-    std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &presentModeCount,
-                                              presentModes.data());
-
-    for (uint32_t i = 0; i < presentModeCount; i++) {
-        if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            break;
-        }
-
-        if (i == presentModeCount - 1) {
-            exitLog("present mode requestd, but not available!");
-        }
+    if (format == VK_FORMAT_UNDEFINED) {
+        exitLog("surface format requestd, but not available!");
     }
 
-    uint32_t imageCount = surfaceCapabiliteis.minImageCount + 1;
-    if (surfaceCapabiliteis.maxImageCount > 0 && imageCount > surfaceCapabiliteis.maxImageCount) {
-        imageCount = surfaceCapabiliteis.maxImageCount;
+    uint32_t modeCount{};
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &modeCount, nullptr);
+    std::vector<VkPresentModeKHR> modes(modeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &modeCount, modes.data());
+
+    if (find(modes.begin(), modes.end(), VK_PRESENT_MODE_MAILBOX_KHR) == modes.end()) {
+        exitLog("present mode requestd, but not available!");
     }
 
-    VkSwapchainCreateInfoKHR swapchainCreateInfo{};
-    swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainCreateInfo.surface = surface_;
-    swapchainCreateInfo.minImageCount = imageCount;
-    swapchainCreateInfo.imageFormat = swapchainImageFormat_;
-    swapchainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    swapchainCreateInfo.imageExtent = swapchainImageExtent_;
-    swapchainCreateInfo.imageArrayLayers = 1;
-    swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainCreateInfo.preTransform = surfaceCapabiliteis.currentTransform;
-    swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainCreateInfo.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-    swapchainCreateInfo.clipped = VK_TRUE;
-    swapchainCreateInfo.oldSwapchain = oldSwapchain;
+    uint32_t imageCount = capabiliteis.minImageCount + 1;
+    if (capabiliteis.maxImageCount > 0 && imageCount > capabiliteis.maxImageCount) {
+        imageCount = capabiliteis.maxImageCount;
+    }
 
-    VK_CHECK(vkCreateSwapchainKHR(device_, &swapchainCreateInfo, nullptr, &swapchain_));
+    VkSwapchainCreateInfoKHR swapchainCI{};
+    swapchainCI.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainCI.surface = surface_;
+    swapchainCI.minImageCount = imageCount;
+    swapchainCI.imageFormat = format;
+    swapchainCI.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    swapchainCI.imageExtent = extent;
+    swapchainCI.imageArrayLayers = 1;
+    swapchainCI.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchainCI.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchainCI.preTransform = capabiliteis.currentTransform;
+    swapchainCI.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchainCI.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+    swapchainCI.clipped = VK_TRUE;
+    swapchainCI.oldSwapchain = oldSwapchain;
+
+    VK_CHECK(vkCreateSwapchainKHR(device_, &swapchainCI, nullptr, &swapchain_));
 
     if (oldSwapchain) {
-        for (const auto& swapChainImageView : swapChainImageViews_) {
-            vkDestroyImageView(device_, swapChainImageView, nullptr);
-        }
+        swapchainImages_.clear();
         vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
     }
 
-    vkGetSwapchainImagesKHR(device_, swapchain_, &swapchainImageCount_, nullptr);
-    swapchainImages_.resize(swapchainImageCount_);
-    vkGetSwapchainImagesKHR(device_, swapchain_, &swapchainImageCount_, swapchainImages_.data());
+    vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, nullptr);
+    std::vector<VkImage> images(imageCount);
+    vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, images.data());
 
-    swapChainImageViews_.resize(swapchainImageCount_);
-    for (uint32_t i = 0; i < swapchainImageCount_; i++) {
-        VkImageViewCreateInfo imageViewCreateInfo{};
-        imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        imageViewCreateInfo.image = swapchainImages_[i];
-        imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = swapchainImageFormat_;
-        imageViewCreateInfo.components = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G,
-                                          VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
-        imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-        imageViewCreateInfo.subresourceRange.levelCount = 1;
-        imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-        imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-        VK_CHECK(
-            vkCreateImageView(device_, &imageViewCreateInfo, nullptr, &swapChainImageViews_[i]));
+    swapchainImages_.reserve(imageCount);
+    for (uint32_t i = 0; i < imageCount; i++) {
+        swapchainImages_.emplace_back(*this);
+        swapchainImages_[i].init(extent, format, images[i]);
+        swapchainImages_[i].createView();
     }
 }
 
@@ -661,13 +634,13 @@ void Engine::createSyncObjects()
         VK_CHECK(vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFences_[i]));
     }
 
-    imageAvailableSemaphores_.resize(swapchainImageCount_);
-    renderFinishedSemaphores_.resize(swapchainImageCount_);
+    imageAvailableSemaphores_.resize(swapchainImages_.size());
+    renderFinishedSemaphores_.resize(swapchainImages_.size());
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    for (size_t i = 0; i < swapchainImageCount_; i++) {
+    for (size_t i = 0; i < swapchainImages_.size(); i++) {
         VK_CHECK(
             vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphores_[i]));
         VK_CHECK(
@@ -681,7 +654,7 @@ void Engine::updateGui()
 
     // Update ImGui IO state
     io.DisplaySize =
-        ImVec2(float(swapchainImageExtent_.width), float(swapchainImageExtent_.height));
+        ImVec2(float(swapchainImages_[0].extent_.width), float(swapchainImages_[0].extent_.height));
     io.MousePos = ImVec2(mouseState_.position.x, mouseState_.position.y);
     io.MouseDown[0] = mouseState_.buttons.left;
     io.MouseDown[1] = mouseState_.buttons.right;
@@ -709,12 +682,15 @@ void Engine::updateGui()
 
 void Engine::drawFrame()
 {
-    vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+    VkFence& fence = inFlightFences_[frameIdx_];
+    VkSemaphore& imgAvailable = imageAvailableSemaphores_[semaphoreIdx_];
+    VkSemaphore& renderFinished = renderFinishedSemaphores_[semaphoreIdx_];
+    VkCommandBuffer& cmd = commandBuffers_[frameIdx_];
 
-    VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
-                                            imageAvailableSemaphores_[currentSemaphore_],
-                                            VK_NULL_HANDLE, &currentImage_);
+    vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
 
+    VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imgAvailable,
+                                            VK_NULL_HANDLE, &imageIdx_);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
         return;
@@ -722,53 +698,64 @@ void Engine::drawFrame()
         exitLog("failed to acquire swap chain image!");
     }
 
-    guiRenderer_->update(currentFrame_);
+    Image2D& img = swapchainImages_[imageIdx_];
 
-    vkResetFences(device_, 1, &inFlightFences_[currentFrame_]);
-    vkResetCommandBuffer(commandBuffers_[currentFrame_], 0);
+    sceneRenderer_->updateUniform(frameIdx_);
+    guiRenderer_->update(frameIdx_);
 
-    sceneRenderer_->draw(commandBuffers_[currentFrame_], currentFrame_);
+    vkResetFences(device_, 1, &fence);
+    vkResetCommandBuffer(cmd, 0);
 
-    VkSemaphoreSubmitInfo waitSemaphoreInfo{};
-    waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    waitSemaphoreInfo.semaphore = imageAvailableSemaphores_[currentSemaphore_];
-    waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    waitSemaphoreInfo.value = 0;
-    waitSemaphoreInfo.deviceIndex = 0;
+    sceneRenderer_->draw(cmd, frameIdx_, img);
+    guiRenderer_->draw(cmd, frameIdx_, img);
 
-    VkSemaphoreSubmitInfo signalSemaphoreInfo{};
-    signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    signalSemaphoreInfo.semaphore = renderFinishedSemaphores_[currentSemaphore_];
-    signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    signalSemaphoreInfo.value = 0;
-    signalSemaphoreInfo.deviceIndex = 0;
+    img.transition(cmd, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                   VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-    VkCommandBufferSubmitInfo cmdBufferInfo{};
-    cmdBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    cmdBufferInfo.commandBuffer = commandBuffers_[currentFrame_];
-    cmdBufferInfo.deviceMask = 0;
+    VK_CHECK(vkEndCommandBuffer(cmd));
 
-    VkSubmitInfo2 submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submitInfo.waitSemaphoreInfoCount = 1;
-    submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
-    submitInfo.commandBufferInfoCount = 1;
-    submitInfo.pCommandBufferInfos = &cmdBufferInfo;
-    submitInfo.signalSemaphoreInfoCount = 1;
-    submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
+    VkSemaphoreSubmitInfo waitSemaphoreSI{};
+    waitSemaphoreSI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    waitSemaphoreSI.semaphore = imgAvailable;
+    waitSemaphoreSI.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    waitSemaphoreSI.value = 0;
+    waitSemaphoreSI.deviceIndex = 0;
 
-    VK_CHECK(vkQueueSubmit2(queue_, 1, &submitInfo, inFlightFences_[currentFrame_]));
+    VkSemaphoreSubmitInfo signalSemaphoreSI{};
+    signalSemaphoreSI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    signalSemaphoreSI.semaphore = renderFinished;
+    signalSemaphoreSI.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    signalSemaphoreSI.value = 0;
+    signalSemaphoreSI.deviceIndex = 0;
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderFinishedSemaphores_[currentSemaphore_];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &swapchain_;
-    presentInfo.pImageIndices = &currentImage_;
-    presentInfo.pResults = nullptr;
+    VkCommandBufferSubmitInfo cmdBufferSI{};
+    cmdBufferSI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cmdBufferSI.commandBuffer = cmd;
+    cmdBufferSI.deviceMask = 0;
 
-    result = vkQueuePresentKHR(queue_, &presentInfo);
+    VkSubmitInfo2 si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    si.waitSemaphoreInfoCount = 1;
+    si.pWaitSemaphoreInfos = &waitSemaphoreSI;
+    si.commandBufferInfoCount = 1;
+    si.pCommandBufferInfos = &cmdBufferSI;
+    si.signalSemaphoreInfoCount = 1;
+    si.pSignalSemaphoreInfos = &signalSemaphoreSI;
+
+    VK_CHECK(vkQueueSubmit2(queue_, 1, &si, fence));
+
+    VkPresentInfoKHR pi{};
+    pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    pi.waitSemaphoreCount = 1;
+    pi.pWaitSemaphores = &renderFinished;
+    pi.swapchainCount = 1;
+    pi.pSwapchains = &swapchain_;
+    pi.pImageIndices = &imageIdx_;
+    pi.pResults = nullptr;
+
+    result = vkQueuePresentKHR(queue_, &pi);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized_) {
         framebufferResized_ = false;
@@ -777,8 +764,8 @@ void Engine::drawFrame()
         exitLog("failed to present swap chain image!");
     }
 
-    currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
-    currentSemaphore_ = (currentSemaphore_ + 1) % swapchainImageCount_;
+    frameIdx_ = (frameIdx_ + 1) % MAX_FRAMES_IN_FLIGHT;
+    semaphoreIdx_ = (semaphoreIdx_ + 1) % swapchainImages_.size();
 }
 
 } // namespace guk

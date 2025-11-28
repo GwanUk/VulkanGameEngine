@@ -50,7 +50,7 @@ void Image2D::transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 srcStageM
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = image_;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.aspectMask = aspect();
     barrier.subresourceRange.baseMipLevel = baseMipLevel;
     barrier.subresourceRange.levelCount = levelCount;
     barrier.subresourceRange.baseArrayLayer = 0;
@@ -116,24 +116,6 @@ void Image2D::createImage(VkExtent2D extent, VkFormat format, VkImageUsageFlags 
 
 void Image2D::createView()
 {
-    VkImageAspectFlags aspect{VK_IMAGE_ASPECT_COLOR_BIT};
-
-    switch (format_) {
-    case VK_FORMAT_D16_UNORM:
-    case VK_FORMAT_X8_D24_UNORM_PACK32:
-    case VK_FORMAT_D32_SFLOAT:
-        aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-        break;
-    case VK_FORMAT_S8_UINT:
-        aspect = VK_IMAGE_ASPECT_STENCIL_BIT;
-        break;
-    case VK_FORMAT_D16_UNORM_S8_UINT:
-    case VK_FORMAT_D24_UNORM_S8_UINT:
-    case VK_FORMAT_D32_SFLOAT_S8_UINT:
-        aspect = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-        break;
-    }
-
     VkImageViewCreateInfo imageViewCI{};
     imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     imageViewCI.image = image_;
@@ -141,7 +123,7 @@ void Image2D::createView()
     imageViewCI.format = format_;
     imageViewCI.components = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G,
                               VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
-    imageViewCI.subresourceRange.aspectMask = aspect;
+    imageViewCI.subresourceRange.aspectMask = aspect();
     imageViewCI.subresourceRange.baseMipLevel = 0;
     imageViewCI.subresourceRange.levelCount = 1;
     imageViewCI.subresourceRange.baseArrayLayer = 0;
@@ -301,6 +283,29 @@ void Image2D::generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels) const
             height /= 2;
         }
     }
+}
+
+VkImageAspectFlags Image2D::aspect() const
+{
+    VkImageAspectFlags aspect{VK_IMAGE_ASPECT_COLOR_BIT};
+
+    switch (format_) {
+    case VK_FORMAT_D16_UNORM:
+    case VK_FORMAT_X8_D24_UNORM_PACK32:
+    case VK_FORMAT_D32_SFLOAT:
+        aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+        break;
+    case VK_FORMAT_S8_UINT:
+        aspect = VK_IMAGE_ASPECT_STENCIL_BIT;
+        break;
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+        aspect = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        break;
+    }
+
+    return aspect;
 }
 
 } // namespace guk

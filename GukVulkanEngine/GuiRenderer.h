@@ -12,7 +12,7 @@ class GuiRenderer
     ~GuiRenderer();
 
     void update(uint32_t frameIdx);
-    void draw(VkCommandBuffer cmd, uint32_t frameIdx);
+    void draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTarget);
 
   private:
     Engine& engine_;

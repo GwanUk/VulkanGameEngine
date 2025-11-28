@@ -1,7 +1,5 @@
 #include "SceneRenderer.h"
 
-#include "GuiRenderer.h"
-
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
@@ -44,13 +42,13 @@ SceneRenderer::~SceneRenderer()
 
 void SceneRenderer::createAttachments()
 {
-    colorAttahcment_.createImage(engine_.swapchainImageExtent_, engine_.swapchainImageFormat_,
-                                 VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                 engine_.sampleCount_);
-    depthStencilAttahcment_.createImage(engine_.swapchainImageExtent_, engine_.depthStencilFormat_,
-                                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                        engine_.sampleCount_);
+    colorAttahcment_.createImage(
+        engine_.swapchainImages_[0].extent_, engine_.swapchainImages_[0].format_,
+        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        engine_.sampleCount_);
+    depthStencilAttahcment_.createImage(
+        engine_.swapchainImages_[0].extent_, engine_.depthStencilFormat_,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, engine_.sampleCount_);
 }
 
 void SceneRenderer::createTextures()
@@ -74,15 +72,15 @@ void SceneRenderer::updateUniform(uint32_t frameIdx)
     ubo.view =
         glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
     ubo.proj = glm::perspective(glm::radians(45.f),
-                                engine_.swapchainImageExtent_.width /
-                                    (float)engine_.swapchainImageExtent_.height,
+                                engine_.swapchainImages_[0].extent_.width /
+                                    (float)engine_.swapchainImages_[0].extent_.height,
                                 0.1f, 10.0f);
     ubo.proj[1][1] *= -1;
 
     memcpy(sceneMapped_[frameIdx], &ubo, sizeof(ubo));
 }
 
-void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
+void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTarget)
 {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -118,7 +116,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
     swapchainImageBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     swapchainImageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     swapchainImageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    swapchainImageBarrier.image = engine_.swapchainImages_[engine_.currentImage_];
+    swapchainImageBarrier.image = renderTarget.image_;
     swapchainImageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     swapchainImageBarrier.subresourceRange.baseMipLevel = 0;
     swapchainImageBarrier.subresourceRange.levelCount = 1;
@@ -160,7 +158,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.clearValue.color = {0.f, 0.f, 0.f, 1.f};
     colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-    colorAttachment.resolveImageView = engine_.swapChainImageViews_[engine_.currentImage_];
+    colorAttachment.resolveImageView = renderTarget.view_;
     colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkRenderingAttachmentInfo depthStecilAttachment{};
@@ -173,8 +171,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
 
     VkRenderingInfo renderingInfo{};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea = {
-        {0, 0}, {engine_.swapchainImageExtent_.width, engine_.swapchainImageExtent_.height}};
+    renderingInfo.renderArea = {0, 0, renderTarget.extent_.width, renderTarget.extent_.height};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &colorAttachment;
@@ -187,15 +184,15 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
     VkViewport viewport{};
     viewport.x = 0.f;
     viewport.y = 0.f;
-    viewport.width = static_cast<float>(engine_.swapchainImageExtent_.width);
-    viewport.height = static_cast<float>(engine_.swapchainImageExtent_.height);
+    viewport.width = static_cast<float>(renderTarget.extent_.width);
+    viewport.height = static_cast<float>(renderTarget.extent_.height);
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = engine_.swapchainImageExtent_;
+    scissor.extent = renderTarget.extent_;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     VkBuffer vertexbuffers[] = {vertexBuffer_};
@@ -210,34 +207,6 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
     vkCmdDrawIndexed(cmd, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
     vkCmdEndRendering(cmd);
-
-    engine_.guiRenderer_->draw(cmd, frameIdx);
-
-    VkImageMemoryBarrier2 presentBarrier{};
-    presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    presentBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    presentBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-    presentBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-    presentBarrier.dstAccessMask = VK_ACCESS_2_NONE;
-    presentBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    presentBarrier.image = engine_.swapchainImages_[engine_.currentImage_];
-    presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    presentBarrier.subresourceRange.baseMipLevel = 0;
-    presentBarrier.subresourceRange.levelCount = 1;
-    presentBarrier.subresourceRange.baseArrayLayer = 0;
-    presentBarrier.subresourceRange.layerCount = 1;
-
-    VkDependencyInfo presentDependencyInfo{};
-    presentDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    presentDependencyInfo.imageMemoryBarrierCount = 1;
-    presentDependencyInfo.pImageMemoryBarriers = &presentBarrier;
-
-    vkCmdPipelineBarrier2(cmd, &presentDependencyInfo);
-
-    VK_CHECK(vkEndCommandBuffer(cmd));
 }
 
 void SceneRenderer::createBuffers()

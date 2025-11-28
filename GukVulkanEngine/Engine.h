@@ -10,6 +10,7 @@ namespace guk {
 
 class SceneRenderer;
 class GuiRenderer;
+class Image2D;
 
 class Engine
 {
@@ -34,17 +35,12 @@ class Engine
     VkPipelineCache pipelineCache_{};
 
     VkFormat depthStencilFormat_{};
-    VkFormat swapchainImageFormat_{};
-    VkExtent2D swapchainImageExtent_{};
 
-    std::vector<VkImage> swapchainImages_;
-    std::vector<VkImageView> swapChainImageViews_;
+    std::vector<Image2D> swapchainImages_;
 
     VkDescriptorPool descriptorPool_{};
 
-    uint32_t currentFrame_{};
-    uint32_t currentSemaphore_{};
-    uint32_t currentImage_{};
+    uint32_t frameIdx_{};
 
     void run();
 
@@ -68,11 +64,13 @@ class Engine
     GLFWwindow* window_{};
     VkSurfaceKHR surface_{};
     VkSwapchainKHR swapchain_{};
-    uint32_t swapchainImageCount_{};
 
     std::array<VkFence, MAX_FRAMES_IN_FLIGHT> inFlightFences_;
     std::vector<VkSemaphore> imageAvailableSemaphores_;
     std::vector<VkSemaphore> renderFinishedSemaphores_;
+
+    uint32_t semaphoreIdx_{};
+    uint32_t imageIdx_{};
 
     void createWindow();
     void createInstance();

@@ -13,7 +13,7 @@ class SceneRenderer
 
     void createAttachments();
     void updateUniform(uint32_t frameIdx);
-    void draw(VkCommandBuffer cmd, uint32_t frameIdx);
+    void draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTarget);
 
   private:
     Engine& engine_;
