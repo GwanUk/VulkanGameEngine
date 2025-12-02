@@ -1,20 +1,19 @@
 #pragma once
 
-#include "Engine.h"
+#include "Device.h"
+
+#include <string>
 
 namespace guk {
 class Image2D
 {
   public:
-    Image2D(Engine& engine);
+    Image2D(std::shared_ptr<Device> device);
     ~Image2D();
 
-    VkExtent2D extent_{};
-    VkFormat format_{};
-
-    VkImage image_{};
-    VkImageView view_{};
-    VkSampler sampler_{};
+    VkImage get() const;
+    VkImageView view() const;
+    VkSampler sampler() const;
 
     void transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 srcStageMask,
                     VkAccessFlagBits2 srcAccessMask, VkPipelineStageFlagBits2 dstStageMask,
@@ -22,28 +21,37 @@ class Image2D
                     VkImageLayout newLayout, uint32_t baseMipLevel = 0,
                     uint32_t levelCount = 1) const;
 
-    void init(VkExtent2D extent, VkFormat format, VkImage image);
-
-    void createImage(VkExtent2D extent, VkFormat format, VkImageUsageFlags usage,
+    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
                      VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, uint32_t mipLevels = 1);
-    void createView();
 
-    void createTexture(unsigned char* data, int width, int height, int channels, VkFormat format,
-                       VkImageUsageFlags usage, bool useMipmap = false);
+    void createView(VkImage image, VkFormat format);
+
+    void createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,
+                       VkFormat format, VkImageUsageFlags usage, bool useMipmap = false);
     void createTexture(const std::string& image, VkFormat format, VkImageUsageFlags usage,
                        bool useMipmap = false);
 
-  private:
-    Engine& engine_;
-    VkDeviceMemory memory_{};
+    void createSamplerAnisoRepeat();
+    void createSamplerAnisoClamp();
+    void createSamplerLinearRepeat();
+    void createSamplerLinearClamp();
 
-    bool imgOwner{true};
+  private:
+    std::shared_ptr<Device> device_;
+
+    VkImage image_{};
+    VkImageView view_{};
+    VkDeviceMemory memory_{};
+    VkSampler sampler_{};
+
+    VkFormat format_{};
+    bool imgOwner_{true};
 
     void clean();
+    void createView();
 
-    void createSampler();
-    void generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels) const;
-
+    void generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels, int32_t width,
+                        int32_t height) const;
     VkImageAspectFlags aspect() const;
 };
 } // namespace guk

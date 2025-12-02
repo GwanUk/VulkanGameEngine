@@ -1,13 +1,16 @@
-#include "SceneRenderer.h"
+#include "Renderer.h"
+#include "Logger.h"
+#include "DataStructures.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
 namespace guk {
 
-SceneRenderer::SceneRenderer(Engine& engine)
-    : engine_(engine), colorAttahcment_{engine_}, depthStencilAttahcment_{engine_},
-      textureImage_{engine_}
+Renderer::Renderer(std::shared_ptr<Device> device)
+    : device_(device), colorAttahcment_(std::make_unique<Image2D>(device_)),
+      depthStencilAttahcment_(std::make_unique<Image2D>(device_)),
+      textureImage_(std::make_unique<Image2D>(device_))
 
 {
     createBuffers();
@@ -17,49 +20,50 @@ SceneRenderer::SceneRenderer(Engine& engine)
 
     createDescriptorSetLayout();
     allocateDescriptorSets();
+
     createPipelineLayout();
     createPipeline();
 }
 
-SceneRenderer::~SceneRenderer()
+Renderer::~Renderer()
 {
-    for (size_t i = 0; i < engine_.MAX_FRAMES_IN_FLIGHT; i++) {
-        vkUnmapMemory(engine_.device_, sceneMemory_[i]);
-        vkDestroyBuffer(engine_.device_, sceneBuffers_[i], nullptr);
-        vkFreeMemory(engine_.device_, sceneMemory_[i], nullptr);
+    for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
+        vkUnmapMemory(device_->hnd(), sceneMemory_[i]);
+        vkDestroyBuffer(device_->hnd(), sceneBuffers_[i], nullptr);
+        vkFreeMemory(device_->hnd(), sceneMemory_[i], nullptr);
     }
 
-    vkDestroyBuffer(engine_.device_, indexBuffer_, nullptr);
-    vkFreeMemory(engine_.device_, vertexMemory_, nullptr);
+    vkDestroyBuffer(device_->hnd(), indexBuffer_, nullptr);
+    vkFreeMemory(device_->hnd(), vertexMemory_, nullptr);
 
-    vkDestroyBuffer(engine_.device_, vertexBuffer_, nullptr);
-    vkFreeMemory(engine_.device_, indexMemory_, nullptr);
+    vkDestroyBuffer(device_->hnd(), vertexBuffer_, nullptr);
+    vkFreeMemory(device_->hnd(), indexMemory_, nullptr);
 
-    vkDestroyPipeline(engine_.device_, pipeline_, nullptr);
-    vkDestroyPipelineLayout(engine_.device_, pipelineLayout_, nullptr);
-    vkDestroyDescriptorSetLayout(engine_.device_, descriptorSetLayout_, nullptr);
+    vkDestroyPipeline(device_->hnd(), pipeline_, nullptr);
+    vkDestroyPipelineLayout(device_->hnd(), pipelineLayout_, nullptr);
+    vkDestroyDescriptorSetLayout(device_->hnd(), descriptorSetLayout_, nullptr);
 }
 
-void SceneRenderer::createAttachments()
+void Renderer::createAttachments()
 {
-    colorAttahcment_.createImage(
-        engine_.swapchainImages_[0].extent_, engine_.swapchainImages_[0].format_,
-        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        engine_.sampleCount_);
-    depthStencilAttahcment_.createImage(
-        engine_.swapchainImages_[0].extent_, engine_.depthStencilFormat_,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, engine_.sampleCount_);
+    colorAttahcment_->createImage(device_->width(), device_->height(), device_->getColorFormat(),
+                                  VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                  device_->smapleCount());
+    depthStencilAttahcment_->createImage(
+        device_->width(), device_->height(), device_->depthStencilFormat(),
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, device_->smapleCount());
 }
 
-void SceneRenderer::createTextures()
+void Renderer::createTextures()
 {
-    textureImage_.createTexture("./assets/blender_uv_grid_2k.png", VK_FORMAT_R8G8B8A8_SRGB,
-                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                                    VK_IMAGE_USAGE_SAMPLED_BIT,
-                                true);
+    textureImage_->createTexture("./assets/blender_uv_grid_2k.png", device_->textureFormat(),
+                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                     VK_IMAGE_USAGE_SAMPLED_BIT,
+                                 true);
 }
 
-void SceneRenderer::updateUniform(uint32_t frameIdx)
+void Renderer::update(uint32_t frameIdx)
 {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -71,17 +75,17 @@ void SceneRenderer::updateUniform(uint32_t frameIdx)
     ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
     ubo.view =
         glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
-    ubo.proj = glm::perspective(glm::radians(45.f),
-                                engine_.swapchainImages_[0].extent_.width /
-                                    (float)engine_.swapchainImages_[0].extent_.height,
-                                0.1f, 10.0f);
+    ubo.proj = glm::perspective(
+        glm::radians(45.f), device_->width() / static_cast<float>(device_->height()), 0.1f, 10.0f);
     ubo.proj[1][1] *= -1;
 
     memcpy(sceneMapped_[frameIdx], &ubo, sizeof(ubo));
 }
 
-void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTarget)
+void Renderer::draw(uint32_t frameIdx, const std::unique_ptr<Image2D>& renderTarget)
 {
+    VkCommandBuffer cmd = device_->cmdBuffers(frameIdx);
+
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = 0;
@@ -99,7 +103,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
     colorAttahcmentBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttahcmentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     colorAttahcmentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    colorAttahcmentBarrier.image = colorAttahcment_.image_;
+    colorAttahcmentBarrier.image = colorAttahcment_->get();
     colorAttahcmentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     colorAttahcmentBarrier.subresourceRange.baseMipLevel = 0;
     colorAttahcmentBarrier.subresourceRange.levelCount = 1;
@@ -116,7 +120,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
     swapchainImageBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     swapchainImageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     swapchainImageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    swapchainImageBarrier.image = renderTarget.image_;
+    swapchainImageBarrier.image = renderTarget->get();
     swapchainImageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     swapchainImageBarrier.subresourceRange.baseMipLevel = 0;
     swapchainImageBarrier.subresourceRange.levelCount = 1;
@@ -133,7 +137,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
     depthStencilBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depthStencilBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     depthStencilBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    depthStencilBarrier.image = depthStencilAttahcment_.image_;
+    depthStencilBarrier.image = depthStencilAttahcment_->get();
     depthStencilBarrier.subresourceRange.aspectMask =
         VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
     depthStencilBarrier.subresourceRange.baseMipLevel = 0;
@@ -152,18 +156,18 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
 
     VkRenderingAttachmentInfo colorAttachment{};
     colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    colorAttachment.imageView = colorAttahcment_.view_;
+    colorAttachment.imageView = colorAttahcment_->view();
     colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.clearValue.color = {0.f, 0.f, 0.f, 1.f};
     colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-    colorAttachment.resolveImageView = renderTarget.view_;
+    colorAttachment.resolveImageView = renderTarget->view();
     colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkRenderingAttachmentInfo depthStecilAttachment{};
     depthStecilAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depthStecilAttachment.imageView = depthStencilAttahcment_.view_;
+    depthStecilAttachment.imageView = depthStencilAttahcment_->view();
     depthStecilAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depthStecilAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthStecilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -171,7 +175,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
 
     VkRenderingInfo renderingInfo{};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea = {0, 0, renderTarget.extent_.width, renderTarget.extent_.height};
+    renderingInfo.renderArea = {0, 0, device_->width(), device_->height()};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &colorAttachment;
@@ -184,15 +188,15 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
     VkViewport viewport{};
     viewport.x = 0.f;
     viewport.y = 0.f;
-    viewport.width = static_cast<float>(renderTarget.extent_.width);
-    viewport.height = static_cast<float>(renderTarget.extent_.height);
+    viewport.width = static_cast<float>(device_->width());
+    viewport.height = static_cast<float>(device_->height());
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = renderTarget.extent_;
+    scissor.extent = device_->getExtent();
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     VkBuffer vertexbuffers[] = {vertexBuffer_};
@@ -209,7 +213,7 @@ void SceneRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& render
     vkCmdEndRendering(cmd);
 }
 
-void SceneRenderer::createBuffers()
+void Renderer::createBuffers()
 {
     VkDeviceSize vertexSize = sizeof(vertices[0]) * vertices.size();
     VkDeviceSize indexSize = sizeof(indices[0]) * indices.size();
@@ -223,52 +227,52 @@ void SceneRenderer::createBuffers()
     bufferCI.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK(vkCreateBuffer(engine_.device_, &bufferCI, nullptr, &stagingBuffer));
+    VK_CHECK(vkCreateBuffer(device_->hnd(), &bufferCI, nullptr, &stagingBuffer));
 
     VkMemoryRequirements memoryRs;
-    vkGetBufferMemoryRequirements(engine_.device_, stagingBuffer, &memoryRs);
+    vkGetBufferMemoryRequirements(device_->hnd(), stagingBuffer, &memoryRs);
 
     VkMemoryAllocateInfo memoryAI{};
     memoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAI.allocationSize = memoryRs.size;
-    memoryAI.memoryTypeIndex = engine_.getMemoryTypeIndex(memoryRs.memoryTypeBits,
-                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    memoryAI.memoryTypeIndex = device_->getMemoryTypeIndex(
+        memoryRs.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAI, nullptr, &stagingMemory));
-    VK_CHECK(vkBindBufferMemory(engine_.device_, stagingBuffer, stagingMemory, 0));
+    VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAI, nullptr, &stagingMemory));
+    VK_CHECK(vkBindBufferMemory(device_->hnd(), stagingBuffer, stagingMemory, 0));
 
     void* mapped;
-    VK_CHECK(vkMapMemory(engine_.device_, stagingMemory, 0, vertexSize + indexSize, 0, &mapped));
+    VK_CHECK(vkMapMemory(device_->hnd(), stagingMemory, 0, vertexSize + indexSize, 0, &mapped));
     memcpy(mapped, vertices.data(), static_cast<size_t>(vertexSize));
     memcpy(static_cast<char*>(mapped) + vertexSize, indices.data(), static_cast<size_t>(indexSize));
-    vkUnmapMemory(engine_.device_, stagingMemory);
+    vkUnmapMemory(device_->hnd(), stagingMemory);
 
     bufferCI.size = vertexSize;
     bufferCI.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    VK_CHECK(vkCreateBuffer(engine_.device_, &bufferCI, nullptr, &vertexBuffer_));
+    VK_CHECK(vkCreateBuffer(device_->hnd(), &bufferCI, nullptr, &vertexBuffer_));
 
-    vkGetBufferMemoryRequirements(engine_.device_, vertexBuffer_, &memoryRs);
+    vkGetBufferMemoryRequirements(device_->hnd(), vertexBuffer_, &memoryRs);
     memoryAI.allocationSize = memoryRs.size;
     memoryAI.memoryTypeIndex =
-        engine_.getMemoryTypeIndex(memoryRs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        device_->getMemoryTypeIndex(memoryRs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAI, nullptr, &vertexMemory_));
-    VK_CHECK(vkBindBufferMemory(engine_.device_, vertexBuffer_, vertexMemory_, 0));
+    VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAI, nullptr, &vertexMemory_));
+    VK_CHECK(vkBindBufferMemory(device_->hnd(), vertexBuffer_, vertexMemory_, 0));
 
     bufferCI.size = indexSize;
     bufferCI.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    VK_CHECK(vkCreateBuffer(engine_.device_, &bufferCI, nullptr, &indexBuffer_));
+    VK_CHECK(vkCreateBuffer(device_->hnd(), &bufferCI, nullptr, &indexBuffer_));
 
-    vkGetBufferMemoryRequirements(engine_.device_, indexBuffer_, &memoryRs);
+    vkGetBufferMemoryRequirements(device_->hnd(), indexBuffer_, &memoryRs);
     memoryAI.allocationSize = memoryRs.size;
     memoryAI.memoryTypeIndex =
-        engine_.getMemoryTypeIndex(memoryRs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        device_->getMemoryTypeIndex(memoryRs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAI, nullptr, &indexMemory_));
-    VK_CHECK(vkBindBufferMemory(engine_.device_, indexBuffer_, indexMemory_, 0));
+    VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAI, nullptr, &indexMemory_));
+    VK_CHECK(vkBindBufferMemory(device_->hnd(), indexBuffer_, indexMemory_, 0));
 
-    VkCommandBuffer cmd = engine_.beginCommand();
+    VkCommandBuffer cmd = device_->beginCmd();
 
     VkBufferCopy copy{};
     copy.size = vertexSize;
@@ -278,42 +282,42 @@ void SceneRenderer::createBuffers()
     copy.size = indexSize;
     vkCmdCopyBuffer(cmd, stagingBuffer, indexBuffer_, 1, &copy);
 
-    engine_.submitAndWait(cmd);
+    device_->submitWait(cmd);
 
-    vkDestroyBuffer(engine_.device_, stagingBuffer, nullptr);
-    vkFreeMemory(engine_.device_, stagingMemory, nullptr);
+    vkDestroyBuffer(device_->hnd(), stagingBuffer, nullptr);
+    vkFreeMemory(device_->hnd(), stagingMemory, nullptr);
 }
 
-void SceneRenderer::createUniformBuffers()
+void Renderer::createUniformBuffers()
 {
-    for (size_t i = 0; i < Engine::MAX_FRAMES_IN_FLIGHT; i++) {
+    for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
         VkBufferCreateInfo bufferCI{};
         bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferCI.size = sizeof(SceneUniform);
         bufferCI.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        VK_CHECK(vkCreateBuffer(engine_.device_, &bufferCI, nullptr, &sceneBuffers_[i]));
+        VK_CHECK(vkCreateBuffer(device_->hnd(), &bufferCI, nullptr, &sceneBuffers_[i]));
 
         VkMemoryRequirements memoryRs;
-        vkGetBufferMemoryRequirements(engine_.device_, sceneBuffers_[i], &memoryRs);
+        vkGetBufferMemoryRequirements(device_->hnd(), sceneBuffers_[i], &memoryRs);
 
         VkMemoryAllocateInfo memoryAI{};
         memoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         memoryAI.allocationSize = memoryRs.size;
-        memoryAI.memoryTypeIndex = engine_.getMemoryTypeIndex(
+        memoryAI.memoryTypeIndex = device_->getMemoryTypeIndex(
             memoryRs.memoryTypeBits,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-        VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAI, nullptr, &sceneMemory_[i]));
-        VK_CHECK(vkBindBufferMemory(engine_.device_, sceneBuffers_[i], sceneMemory_[i], 0));
+        VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAI, nullptr, &sceneMemory_[i]));
+        VK_CHECK(vkBindBufferMemory(device_->hnd(), sceneBuffers_[i], sceneMemory_[i], 0));
 
-        VK_CHECK(vkMapMemory(engine_.device_, sceneMemory_[i], 0, sizeof(SceneUniform), 0,
+        VK_CHECK(vkMapMemory(device_->hnd(), sceneMemory_[i], 0, sizeof(SceneUniform), 0,
                              &sceneMapped_[i]));
     }
 }
 
-void SceneRenderer::createDescriptorSetLayout()
+void Renderer::createDescriptorSetLayout()
 {
     VkDescriptorSetLayoutBinding uboDescriptorSetLayoutBinding{};
     uboDescriptorSetLayoutBinding.binding = 0;
@@ -335,25 +339,25 @@ void SceneRenderer::createDescriptorSetLayout()
     descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size());
     descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
 
-    VK_CHECK(vkCreateDescriptorSetLayout(engine_.device_, &descriptorSetLayoutCI, nullptr,
+    VK_CHECK(vkCreateDescriptorSetLayout(device_->hnd(), &descriptorSetLayoutCI, nullptr,
                                          &descriptorSetLayout_));
 }
 
-void SceneRenderer::allocateDescriptorSets()
+void Renderer::allocateDescriptorSets()
 {
-    std::vector<VkDescriptorSetLayout> descriptorSetLayouts(engine_.MAX_FRAMES_IN_FLIGHT,
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts(Device::MAX_FRAMES_IN_FLIGHT,
                                                             descriptorSetLayout_);
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool = engine_.descriptorPool_;
-    descriptorSetAllocateInfo.descriptorSetCount = engine_.MAX_FRAMES_IN_FLIGHT;
+    descriptorSetAllocateInfo.descriptorPool = device_->descriptorPool();
+    descriptorSetAllocateInfo.descriptorSetCount = Device::MAX_FRAMES_IN_FLIGHT;
     descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
-    VK_CHECK(vkAllocateDescriptorSets(engine_.device_, &descriptorSetAllocateInfo,
+    VK_CHECK(vkAllocateDescriptorSets(device_->hnd(), &descriptorSetAllocateInfo,
                                       descriptorSets_.data()));
 
-    for (uint32_t i = 0; i < engine_.MAX_FRAMES_IN_FLIGHT; i++) {
+    for (uint32_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = sceneBuffers_[i];
         bufferInfo.offset = 0;
@@ -361,8 +365,8 @@ void SceneRenderer::allocateDescriptorSets()
 
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureImage_.view_;
-        imageInfo.sampler = textureImage_.sampler_;
+        imageInfo.imageView = textureImage_->view();
+        imageInfo.sampler = textureImage_->sampler();
 
         std::vector<VkWriteDescriptorSet> descriptorWrites(2);
 
@@ -386,25 +390,25 @@ void SceneRenderer::allocateDescriptorSets()
         descriptorWrites[1].pImageInfo = &imageInfo;
         descriptorWrites[1].pTexelBufferView = nullptr;
 
-        vkUpdateDescriptorSets(engine_.device_, static_cast<uint32_t>(descriptorWrites.size()),
+        vkUpdateDescriptorSets(device_->hnd(), static_cast<uint32_t>(descriptorWrites.size()),
                                descriptorWrites.data(), 0, nullptr);
     }
 }
 
-void SceneRenderer::createPipelineLayout()
+void Renderer::createPipelineLayout()
 {
     VkPipelineLayoutCreateInfo pipelineLayoutCI{};
     pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCI.setLayoutCount = 1;
     pipelineLayoutCI.pSetLayouts = &descriptorSetLayout_;
 
-    VK_CHECK(vkCreatePipelineLayout(engine_.device_, &pipelineLayoutCI, nullptr, &pipelineLayout_));
+    VK_CHECK(vkCreatePipelineLayout(device_->hnd(), &pipelineLayoutCI, nullptr, &pipelineLayout_));
 }
 
-void SceneRenderer::createPipeline()
+void Renderer::createPipeline()
 {
-    VkShaderModule vertexShaderModule = engine_.createShaderModule("./shaders/test.vert.spv");
-    VkShaderModule fragmentShaderModule = engine_.createShaderModule("./shaders/test.frag.spv");
+    VkShaderModule vertexShaderModule = device_->createShaderModule("./shaders/test.vert.spv");
+    VkShaderModule fragmentShaderModule = device_->createShaderModule("./shaders/test.frag.spv");
 
     VkPipelineShaderStageCreateInfo pipelineVertexShaderStageCI{};
     pipelineVertexShaderStageCI.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -452,7 +456,7 @@ void SceneRenderer::createPipeline()
     VkPipelineMultisampleStateCreateInfo pipelineMultisampleStateCI{};
     pipelineMultisampleStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     pipelineMultisampleStateCI.sampleShadingEnable = VK_FALSE;
-    pipelineMultisampleStateCI.rasterizationSamples = engine_.sampleCount_;
+    pipelineMultisampleStateCI.rasterizationSamples = device_->smapleCount();
 
     VkPipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCI{};
     pipelineDepthStencilStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -503,8 +507,8 @@ void SceneRenderer::createPipeline()
     VkPipelineRenderingCreateInfo pipelineRenderingCI{};
     pipelineRenderingCI.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     pipelineRenderingCI.colorAttachmentCount = 1;
-    pipelineRenderingCI.pColorAttachmentFormats = &colorAttahcment_.format_;
-    pipelineRenderingCI.depthAttachmentFormat = depthStencilAttahcment_.format_;
+    pipelineRenderingCI.pColorAttachmentFormats = &device_->getColorFormat();
+    pipelineRenderingCI.depthAttachmentFormat = device_->depthStencilFormat();
     pipelineRenderingCI.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     VkGraphicsPipelineCreateInfo graphicsPipelineCI{};
@@ -526,11 +530,11 @@ void SceneRenderer::createPipeline()
     graphicsPipelineCI.basePipelineHandle = VK_NULL_HANDLE;
     graphicsPipelineCI.basePipelineIndex = -1;
 
-    VK_CHECK(vkCreateGraphicsPipelines(engine_.device_, engine_.pipelineCache_, 1,
-                                       &graphicsPipelineCI, nullptr, &pipeline_));
+    VK_CHECK(vkCreateGraphicsPipelines(device_->hnd(), device_->cache(), 1, &graphicsPipelineCI,
+                                       nullptr, &pipeline_));
 
-    vkDestroyShaderModule(engine_.device_, vertexShaderModule, nullptr);
-    vkDestroyShaderModule(engine_.device_, fragmentShaderModule, nullptr);
+    vkDestroyShaderModule(device_->hnd(), vertexShaderModule, nullptr);
+    vkDestroyShaderModule(device_->hnd(), fragmentShaderModule, nullptr);
 }
 
 } // namespace guk

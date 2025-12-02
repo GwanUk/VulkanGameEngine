@@ -1,10 +1,13 @@
-#include "GuiRenderer.h"
+#include "RendererGui.h"
+#include "Logger.h"
+#include "DataStructures.h"
 
 #include <imgui.h>
 
 namespace guk {
 
-GuiRenderer::GuiRenderer(Engine& engine) : engine_(engine), fontTexture_{engine_}
+RendererGui::RendererGui(std::shared_ptr<Device> device)
+    : device_(device), fontTexture_(std::make_unique<Image2D>(device_))
 {
     init();
     createDescriptorSetLayout();
@@ -13,24 +16,24 @@ GuiRenderer::GuiRenderer(Engine& engine) : engine_(engine), fontTexture_{engine_
     createPipeline();
 }
 
-GuiRenderer::~GuiRenderer()
+RendererGui::~RendererGui()
 {
-    vkDestroyPipeline(engine_.device_, pipeline_, nullptr);
-    vkDestroyPipelineLayout(engine_.device_, pipelineLayout_, nullptr);
-    vkDestroyDescriptorSetLayout(engine_.device_, descriptorSetLayout_, nullptr);
+    vkDestroyPipeline(device_->hnd(), pipeline_, nullptr);
+    vkDestroyPipelineLayout(device_->hnd(), pipelineLayout_, nullptr);
+    vkDestroyDescriptorSetLayout(device_->hnd(), descriptorSetLayout_, nullptr);
 
-    for (size_t i = 0; i < engine_.MAX_FRAMES_IN_FLIGHT; i++) {
-        vkUnmapMemory(engine_.device_, vertexBufferMemorys_[i]);
-        vkDestroyBuffer(engine_.device_, vertexBuffers_[i], nullptr);
-        vkFreeMemory(engine_.device_, vertexBufferMemorys_[i], nullptr);
+    for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
+        vkUnmapMemory(device_->hnd(), vertexBufferMemorys_[i]);
+        vkDestroyBuffer(device_->hnd(), vertexBuffers_[i], nullptr);
+        vkFreeMemory(device_->hnd(), vertexBufferMemorys_[i], nullptr);
 
-        vkUnmapMemory(engine_.device_, indexBufferMemorys_[i]);
-        vkDestroyBuffer(engine_.device_, indexBuffers_[i], nullptr);
-        vkFreeMemory(engine_.device_, indexBufferMemorys_[i], nullptr);
+        vkUnmapMemory(device_->hnd(), indexBufferMemorys_[i]);
+        vkDestroyBuffer(device_->hnd(), indexBuffers_[i], nullptr);
+        vkFreeMemory(device_->hnd(), indexBufferMemorys_[i], nullptr);
     }
 }
 
-void GuiRenderer::update(uint32_t frameIdx)
+void RendererGui::update(uint32_t frameIdx)
 {
     ImDrawData* drawData = ImGui::GetDrawData();
     if (!drawData || !drawData->TotalVtxCount || !drawData->TotalIdxCount) {
@@ -45,7 +48,7 @@ void GuiRenderer::update(uint32_t frameIdx)
 
         VkDeviceSize newSize = std::max(static_cast<VkDeviceSize>(vertexBufferSize * 1.5f),
                                         static_cast<VkDeviceSize>(512 * sizeof(ImDrawVert)));
-        createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, newSize);
+        createBuffer(frameIdx, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, newSize);
     }
 
     if (indexBuffers_[frameIdx] != VK_NULL_HANDLE ||
@@ -53,7 +56,7 @@ void GuiRenderer::update(uint32_t frameIdx)
 
         VkDeviceSize newSize = std::max(static_cast<VkDeviceSize>(vertexBufferSize * 1.5f),
                                         static_cast<VkDeviceSize>(1024 * sizeof(ImDrawIdx)));
-        createBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, newSize);
+        createBuffer(frameIdx, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, newSize);
     }
 
     ImDrawVert* vtxDst = (ImDrawVert*)vertexMappeds_[frameIdx];
@@ -77,22 +80,24 @@ void GuiRenderer::update(uint32_t frameIdx)
     mappedMemoryRanges[1].offset = 0;
     mappedMemoryRanges[1].size = indexAllocationSizes_[frameIdx];
 
-    VK_CHECK(vkFlushMappedMemoryRanges(engine_.device_,
+    VK_CHECK(vkFlushMappedMemoryRanges(device_->hnd(),
                                        static_cast<uint32_t>(mappedMemoryRanges.size()),
                                        mappedMemoryRanges.data()));
 }
 
-void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTarget)
+void RendererGui::draw(uint32_t frameIdx, const std::unique_ptr<Image2D>& renderTarget)
 {
+    VkCommandBuffer cmd = device_->cmdBuffers(frameIdx);
+
     VkRenderingAttachmentInfo renderingAttachmentInfo{};
     renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfo.imageView = renderTarget.view_;
+    renderingAttachmentInfo.imageView = renderTarget->view();
     renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
     VkRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
-    renderingInfo.renderArea = {0, 0, renderTarget.extent_.width, renderTarget.extent_.height};
+    renderingInfo.renderArea = {0, 0, device_->width(), device_->height()};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &renderingAttachmentInfo;
@@ -107,8 +112,8 @@ void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTa
     VkViewport viewport{};
     viewport.x = 0.f;
     viewport.y = 0.f;
-    viewport.width = static_cast<float>(renderTarget.extent_.width);
-    viewport.height = static_cast<float>(renderTarget.extent_.height);
+    viewport.width = static_cast<float>(device_->width());
+    viewport.height = static_cast<float>(device_->height());
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -151,7 +156,7 @@ void GuiRenderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, Image2D& renderTa
     vkCmdEndRendering(cmd);
 }
 
-void GuiRenderer::init()
+void RendererGui::init()
 {
     ImGui::CreateContext();
     ImGuiStyle& style = ImGui::GetStyle();
@@ -194,11 +199,11 @@ void GuiRenderer::init()
         exitLog("Failed to load font data from: {}", font);
     }
 
-    fontTexture_.createTexture(data, width, height, 4, VK_FORMAT_R8G8B8A8_UNORM,
-                               VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    fontTexture_->createTexture(data, width, height, 4, device_->textureFormat(false),
+                                VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 }
 
-void GuiRenderer::createDescriptorSetLayout()
+void RendererGui::createDescriptorSetLayout()
 {
     VkDescriptorSetLayoutBinding descriptorSetLayoutBinding{};
     descriptorSetLayoutBinding.binding = 0;
@@ -211,25 +216,24 @@ void GuiRenderer::createDescriptorSetLayout()
     descriptorSetLayoutCI.bindingCount = 1;
     descriptorSetLayoutCI.pBindings = &descriptorSetLayoutBinding;
 
-    VK_CHECK(vkCreateDescriptorSetLayout(engine_.device_, &descriptorSetLayoutCI, nullptr,
+    VK_CHECK(vkCreateDescriptorSetLayout(device_->hnd(), &descriptorSetLayoutCI, nullptr,
                                          &descriptorSetLayout_));
 }
 
-void GuiRenderer::allocateDescriptorSets()
+void RendererGui::allocateDescriptorSets()
 {
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool = engine_.descriptorPool_;
+    descriptorSetAllocateInfo.descriptorPool = device_->descriptorPool();
     descriptorSetAllocateInfo.descriptorSetCount = 1;
     descriptorSetAllocateInfo.pSetLayouts = &descriptorSetLayout_;
 
-    VK_CHECK(
-        vkAllocateDescriptorSets(engine_.device_, &descriptorSetAllocateInfo, &descriptorSet_));
+    VK_CHECK(vkAllocateDescriptorSets(device_->hnd(), &descriptorSetAllocateInfo, &descriptorSet_));
 
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = fontTexture_.view_;
-    imageInfo.sampler = fontTexture_.sampler_;
+    imageInfo.imageView = fontTexture_->view();
+    imageInfo.sampler = fontTexture_->sampler();
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -239,10 +243,10 @@ void GuiRenderer::allocateDescriptorSets()
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pImageInfo = &imageInfo;
 
-    vkUpdateDescriptorSets(engine_.device_, 1, &descriptorWrite, 0, nullptr);
+    vkUpdateDescriptorSets(device_->hnd(), 1, &descriptorWrite, 0, nullptr);
 }
 
-void GuiRenderer::createPipelineLayout()
+void RendererGui::createPipelineLayout()
 {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -256,13 +260,13 @@ void GuiRenderer::createPipelineLayout()
     pipelineLayoutCI.pushConstantRangeCount = 1;
     pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
 
-    VK_CHECK(vkCreatePipelineLayout(engine_.device_, &pipelineLayoutCI, nullptr, &pipelineLayout_));
+    VK_CHECK(vkCreatePipelineLayout(device_->hnd(), &pipelineLayoutCI, nullptr, &pipelineLayout_));
 }
 
-void GuiRenderer::createPipeline()
+void RendererGui::createPipeline()
 {
-    VkShaderModule vertexShaderModule = engine_.createShaderModule("shaders/imgui.vert.spv");
-    VkShaderModule fragmentShaderModule = engine_.createShaderModule("shaders/imgui.frag.spv");
+    VkShaderModule vertexShaderModule = device_->createShaderModule("shaders/imgui.vert.spv");
+    VkShaderModule fragmentShaderModule = device_->createShaderModule("shaders/imgui.frag.spv");
 
     VkPipelineShaderStageCreateInfo pipelineVertexShaderStageCI{};
     pipelineVertexShaderStageCI.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -379,7 +383,7 @@ void GuiRenderer::createPipeline()
     VkPipelineRenderingCreateInfo pipelineRenderingCI{};
     pipelineRenderingCI.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     pipelineRenderingCI.colorAttachmentCount = 1;
-    pipelineRenderingCI.pColorAttachmentFormats = &engine_.swapchainImages_[0].format_;
+    pipelineRenderingCI.pColorAttachmentFormats = &device_->getColorFormat();
     pipelineRenderingCI.depthAttachmentFormat = VK_FORMAT_UNDEFINED;
     pipelineRenderingCI.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
@@ -402,38 +406,36 @@ void GuiRenderer::createPipeline()
     graphicsPipelineCI.basePipelineHandle = VK_NULL_HANDLE;
     graphicsPipelineCI.basePipelineIndex = -1;
 
-    VK_CHECK(vkCreateGraphicsPipelines(engine_.device_, engine_.pipelineCache_, 1,
-                                       &graphicsPipelineCI, nullptr, &pipeline_));
+    VK_CHECK(vkCreateGraphicsPipelines(device_->hnd(), device_->cache(), 1, &graphicsPipelineCI,
+                                       nullptr, &pipeline_));
 
-    vkDestroyShaderModule(engine_.device_, vertexShaderModule, nullptr);
-    vkDestroyShaderModule(engine_.device_, fragmentShaderModule, nullptr);
+    vkDestroyShaderModule(device_->hnd(), vertexShaderModule, nullptr);
+    vkDestroyShaderModule(device_->hnd(), fragmentShaderModule, nullptr);
 }
 
-void GuiRenderer::createBuffer(VkBufferUsageFlagBits usage, VkDeviceSize size)
+void RendererGui::createBuffer(uint32_t frameIdx, VkBufferUsageFlagBits usage, VkDeviceSize size)
 {
-    VkBuffer& buffer = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                           ? vertexBuffers_[engine_.frameIdx_]
-                           : indexBuffers_[engine_.frameIdx_];
+    VkBuffer& buffer = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT ? vertexBuffers_[frameIdx]
+                                                                 : indexBuffers_[frameIdx];
     VkDeviceMemory& memory = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                                 ? vertexBufferMemorys_[engine_.frameIdx_]
-                                 : indexBufferMemorys_[engine_.frameIdx_];
-    void*& mapped = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                        ? vertexMappeds_[engine_.frameIdx_]
-                        : indexMappeds_[engine_.frameIdx_];
+                                 ? vertexBufferMemorys_[frameIdx]
+                                 : indexBufferMemorys_[frameIdx];
+    void*& mapped = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT ? vertexMappeds_[frameIdx]
+                                                              : indexMappeds_[frameIdx];
     VkDeviceSize& allocationSize = usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                                       ? vertexAllocationSizes_[engine_.frameIdx_]
-                                       : indexAllocationSizes_[engine_.frameIdx_];
+                                       ? vertexAllocationSizes_[frameIdx]
+                                       : indexAllocationSizes_[frameIdx];
 
     if (mapped) {
-        vkUnmapMemory(engine_.device_, memory);
+        vkUnmapMemory(device_->hnd(), memory);
         mapped = nullptr;
     }
     if (buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(engine_.device_, buffer, nullptr);
+        vkDestroyBuffer(device_->hnd(), buffer, nullptr);
         buffer = VK_NULL_HANDLE;
     }
     if (memory != VK_NULL_HANDLE) {
-        vkFreeMemory(engine_.device_, memory, nullptr);
+        vkFreeMemory(device_->hnd(), memory, nullptr);
         memory = VK_NULL_HANDLE;
     }
 
@@ -443,22 +445,22 @@ void GuiRenderer::createBuffer(VkBufferUsageFlagBits usage, VkDeviceSize size)
     bufferCreateInfo.usage = usage;
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK(vkCreateBuffer(engine_.device_, &bufferCreateInfo, nullptr, &buffer));
+    VK_CHECK(vkCreateBuffer(device_->hnd(), &bufferCreateInfo, nullptr, &buffer));
 
     VkMemoryRequirements memoryRequirements;
-    vkGetBufferMemoryRequirements(engine_.device_, buffer, &memoryRequirements);
+    vkGetBufferMemoryRequirements(device_->hnd(), buffer, &memoryRequirements);
     allocationSize = memoryRequirements.size;
 
     VkMemoryAllocateInfo memoryAllocateInfo{};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.allocationSize = allocationSize;
-    memoryAllocateInfo.memoryTypeIndex = engine_.getMemoryTypeIndex(
+    memoryAllocateInfo.memoryTypeIndex = device_->getMemoryTypeIndex(
         memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
-    VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAllocateInfo, nullptr, &memory));
-    VK_CHECK(vkBindBufferMemory(engine_.device_, buffer, memory, 0));
+    VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAllocateInfo, nullptr, &memory));
+    VK_CHECK(vkBindBufferMemory(device_->hnd(), buffer, memory, 0));
 
-    VK_CHECK(vkMapMemory(engine_.device_, memory, 0, allocationSize, 0, &mapped));
+    VK_CHECK(vkMapMemory(device_->hnd(), memory, 0, allocationSize, 0, &mapped));
 }
 
 } // namespace guk

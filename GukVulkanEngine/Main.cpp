@@ -1,9 +1,12 @@
-#include "Engine.h"
+#include "Game.h"
 
 int main()
 {
-    guk::Engine engin;
-    engin.run();
+    using namespace guk;
+
+    auto game = std::make_unique<Game>();
+
+    game->run();
 
     return 0;
 }

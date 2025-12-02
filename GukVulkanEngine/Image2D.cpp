@@ -1,11 +1,12 @@
 #include "Image2D.h"
+#include "Logger.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 namespace guk {
 
-Image2D::Image2D(Engine& engine) : engine_(engine)
+Image2D::Image2D(std::shared_ptr<Device> device) : device_(device)
 {
 }
 
@@ -14,22 +15,37 @@ Image2D::~Image2D()
     clean();
 }
 
+VkImage Image2D::get() const
+{
+    return image_;
+}
+
+VkImageView Image2D::view() const
+{
+    return view_;
+}
+
+VkSampler Image2D::sampler() const
+{
+    return sampler_;
+}
+
 void Image2D::clean()
 {
     if (sampler_) {
-        vkDestroySampler(engine_.device_, sampler_, nullptr);
+        vkDestroySampler(device_->hnd(), sampler_, nullptr);
         sampler_ = VK_NULL_HANDLE;
     }
     if (view_) {
-        vkDestroyImageView(engine_.device_, view_, nullptr);
+        vkDestroyImageView(device_->hnd(), view_, nullptr);
         view_ = VK_NULL_HANDLE;
     }
-    if (image_ && imgOwner) {
-        vkDestroyImage(engine_.device_, image_, nullptr);
+    if (image_ && imgOwner_) {
+        vkDestroyImage(device_->hnd(), image_, nullptr);
         image_ = VK_NULL_HANDLE;
     }
     if (memory_) {
-        vkFreeMemory(engine_.device_, memory_, nullptr);
+        vkFreeMemory(device_->hnd(), memory_, nullptr);
         memory_ = VK_NULL_HANDLE;
     }
 }
@@ -64,29 +80,17 @@ void Image2D::transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 srcStageM
     vkCmdPipelineBarrier2(cmd, &di);
 }
 
-void Image2D::init(VkExtent2D extent, VkFormat format, VkImage image)
-{
-    clean();
-
-    extent_ = extent;
-    format_ = format;
-
-    if (image != VK_NULL_HANDLE) {
-        image_ = image;
-        imgOwner = false;
-    }
-}
-
-void Image2D::createImage(VkExtent2D extent, VkFormat format, VkImageUsageFlags usage,
+void Image2D::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
                           VkSampleCountFlagBits samples, uint32_t mipLevels)
 {
-    init(extent, format, VK_NULL_HANDLE);
+    clean();
+    format_ = format;
 
     VkImageCreateInfo imageCI{};
     imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCI.imageType = VK_IMAGE_TYPE_2D;
-    imageCI.extent.width = extent_.width;
-    imageCI.extent.height = extent_.height;
+    imageCI.extent.width = width;
+    imageCI.extent.height = height;
     imageCI.extent.depth = 1;
     imageCI.mipLevels = mipLevels;
     imageCI.arrayLayers = 1;
@@ -97,19 +101,19 @@ void Image2D::createImage(VkExtent2D extent, VkFormat format, VkImageUsageFlags 
     imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCI.samples = samples;
 
-    VK_CHECK(vkCreateImage(engine_.device_, &imageCI, nullptr, &image_));
+    VK_CHECK(vkCreateImage(device_->hnd(), &imageCI, nullptr, &image_));
 
     VkMemoryRequirements memoryRs;
-    vkGetImageMemoryRequirements(engine_.device_, image_, &memoryRs);
+    vkGetImageMemoryRequirements(device_->hnd(), image_, &memoryRs);
 
     VkMemoryAllocateInfo memoryAI{};
     memoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAI.allocationSize = memoryRs.size;
     memoryAI.memoryTypeIndex =
-        engine_.getMemoryTypeIndex(memoryRs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        device_->getMemoryTypeIndex(memoryRs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAI, nullptr, &memory_));
-    VK_CHECK(vkBindImageMemory(engine_.device_, image_, memory_, 0));
+    VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAI, nullptr, &memory_));
+    VK_CHECK(vkBindImageMemory(device_->hnd(), image_, memory_, 0));
 
     createView();
 }
@@ -129,13 +133,23 @@ void Image2D::createView()
     imageViewCI.subresourceRange.baseArrayLayer = 0;
     imageViewCI.subresourceRange.layerCount = 1;
 
-    VK_CHECK(vkCreateImageView(engine_.device_, &imageViewCI, nullptr, &view_));
+    VK_CHECK(vkCreateImageView(device_->hnd(), &imageViewCI, nullptr, &view_));
 }
 
-void Image2D::createTexture(unsigned char* data, int width, int height, int channels,
+void Image2D::createView(VkImage image, VkFormat format)
+{
+    clean();
+    image_ = image;
+    format_ = format;
+    imgOwner_ = false;
+    createView();
+}
+
+void Image2D::createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,
                             VkFormat format, VkImageUsageFlags usage, bool useMipmap)
 {
-    VkDeviceSize dataSize = static_cast<VkDeviceSize>(width) * height * channels;
+    VkDeviceSize dataSize =
+        static_cast<VkDeviceSize>(width) * static_cast<VkDeviceSize>(height) * channels;
 
     uint32_t mipLevels =
         useMipmap ? static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1 : 1;
@@ -149,32 +163,31 @@ void Image2D::createTexture(unsigned char* data, int width, int height, int chan
     bufferCI.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK(vkCreateBuffer(engine_.device_, &bufferCI, nullptr, &stagingbuffer));
+    VK_CHECK(vkCreateBuffer(device_->hnd(), &bufferCI, nullptr, &stagingbuffer));
 
     VkMemoryRequirements memoryRs;
-    vkGetBufferMemoryRequirements(engine_.device_, stagingbuffer, &memoryRs);
+    vkGetBufferMemoryRequirements(device_->hnd(), stagingbuffer, &memoryRs);
 
     VkMemoryAllocateInfo memoryAI{};
     memoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAI.allocationSize = memoryRs.size;
-    memoryAI.memoryTypeIndex = engine_.getMemoryTypeIndex(memoryRs.memoryTypeBits,
-                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    memoryAI.memoryTypeIndex = device_->getMemoryTypeIndex(
+        memoryRs.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    VK_CHECK(vkAllocateMemory(engine_.device_, &memoryAI, nullptr, &stagingMemory));
-    VK_CHECK(vkBindBufferMemory(engine_.device_, stagingbuffer, stagingMemory, 0));
+    VK_CHECK(vkAllocateMemory(device_->hnd(), &memoryAI, nullptr, &stagingMemory));
+    VK_CHECK(vkBindBufferMemory(device_->hnd(), stagingbuffer, stagingMemory, 0));
 
     void* mapped;
-    VK_CHECK(vkMapMemory(engine_.device_, stagingMemory, 0, dataSize, 0, &mapped));
+    VK_CHECK(vkMapMemory(device_->hnd(), stagingMemory, 0, dataSize, 0, &mapped));
     memcpy(mapped, data, static_cast<size_t>(dataSize));
-    vkUnmapMemory(engine_.device_, stagingMemory);
+    vkUnmapMemory(device_->hnd(), stagingMemory);
     stbi_image_free(data);
 
-    createImage({static_cast<uint32_t>(width), static_cast<uint32_t>(height)}, format, usage,
-                VK_SAMPLE_COUNT_1_BIT, mipLevels);
-    createSampler();
+    createImage(width, height, format, usage, VK_SAMPLE_COUNT_1_BIT, mipLevels);
+    createSamplerAnisoRepeat();
 
-    VkCommandBuffer cmd = engine_.beginCommand();
+    VkCommandBuffer cmd = device_->beginCmd();
 
     transition(cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
                VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -189,12 +202,12 @@ void Image2D::createTexture(unsigned char* data, int width, int height, int chan
     copy.imageSubresource.baseArrayLayer = 0;
     copy.imageSubresource.layerCount = 1;
     copy.imageOffset = {0, 0, 0};
-    copy.imageExtent = {extent_.width, extent_.height, 1};
+    copy.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
     vkCmdCopyBufferToImage(cmd, stagingbuffer, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                            &copy);
 
     if (useMipmap) {
-        generateMipmap(cmd, mipLevels);
+        generateMipmap(cmd, mipLevels, static_cast<int32_t>(width), static_cast<int32_t>(height));
     }
 
     transition(cmd, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -202,10 +215,10 @@ void Image2D::createTexture(unsigned char* data, int width, int height, int chan
                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                mipLevels - 1);
 
-    engine_.submitAndWait(cmd);
+    device_->submitWait(cmd);
 
-    vkDestroyBuffer(engine_.device_, stagingbuffer, nullptr);
-    vkFreeMemory(engine_.device_, stagingMemory, nullptr);
+    vkDestroyBuffer(device_->hnd(), stagingbuffer, nullptr);
+    vkFreeMemory(device_->hnd(), stagingMemory, nullptr);
 }
 
 void Image2D::createTexture(const std::string& image, VkFormat format, VkImageUsageFlags usage,
@@ -220,34 +233,111 @@ void Image2D::createTexture(const std::string& image, VkFormat format, VkImageUs
     createTexture(data, width, height, 4, format, usage, useMipmap);
 }
 
-void Image2D::createSampler()
+void Image2D::createSamplerAnisoRepeat()
+{
+    VkPhysicalDeviceFeatures features{};
+    vkGetPhysicalDeviceFeatures(device_->pHnd(), &features);
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(device_->pHnd(), &properties);
+
+    VkSamplerCreateInfo samplerCI{};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR;
+    samplerCI.minFilter = VK_FILTER_LINEAR;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = features.samplerAnisotropy;
+    samplerCI.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCI.minLod = 0.f;
+    samplerCI.maxLod = VK_LOD_CLAMP_NONE;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
+
+    VK_CHECK(vkCreateSampler(device_->hnd(), &samplerCI, nullptr, &sampler_));
+}
+
+void Image2D::createSamplerAnisoClamp()
+{
+    VkPhysicalDeviceFeatures features{};
+    vkGetPhysicalDeviceFeatures(device_->pHnd(), &features);
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(device_->pHnd(), &properties);
+
+    VkSamplerCreateInfo samplerCI{};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR;
+    samplerCI.minFilter = VK_FILTER_LINEAR;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = features.samplerAnisotropy;
+    samplerCI.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCI.minLod = 0.f;
+    samplerCI.maxLod = VK_LOD_CLAMP_NONE;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
+
+    VK_CHECK(vkCreateSampler(device_->hnd(), &samplerCI, nullptr, &sampler_));
+}
+
+void Image2D::createSamplerLinearRepeat()
 {
     VkSamplerCreateInfo samplerCI{};
     samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerCI.magFilter = VK_FILTER_LINEAR;
     samplerCI.minFilter = VK_FILTER_LINEAR;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerCI.anisotropyEnable = engine_.physicalDeviceFeatures_.samplerAnisotropy;
-    samplerCI.maxAnisotropy = engine_.physicalDeviceProperties_.limits.maxSamplerAnisotropy;
-    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerCI.unnormalizedCoordinates = VK_FALSE;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = VK_FALSE;
+    samplerCI.maxAnisotropy = 1.f;
     samplerCI.compareEnable = VK_FALSE;
     samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerCI.minLod = 0.f;
     samplerCI.maxLod = VK_LOD_CLAMP_NONE;
-    samplerCI.mipLodBias = 0.f;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
 
-    VK_CHECK(vkCreateSampler(engine_.device_, &samplerCI, nullptr, &sampler_));
+    VK_CHECK(vkCreateSampler(device_->hnd(), &samplerCI, nullptr, &sampler_));
 }
 
-void Image2D::generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels) const
+void Image2D::createSamplerLinearClamp()
 {
-    int32_t width = extent_.width;
-    int32_t height = extent_.height;
+    VkSamplerCreateInfo samplerCI{};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR;
+    samplerCI.minFilter = VK_FILTER_LINEAR;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = VK_FALSE;
+    samplerCI.maxAnisotropy = 1.f;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCI.minLod = 0.f;
+    samplerCI.maxLod = VK_LOD_CLAMP_NONE;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
 
+    VK_CHECK(vkCreateSampler(device_->hnd(), &samplerCI, nullptr, &sampler_));
+}
+
+void Image2D::generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels, int32_t width,
+                             int32_t height) const
+{
     for (uint32_t i = 1; i < mipLevels; i++) {
         transition(cmd, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                    VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
