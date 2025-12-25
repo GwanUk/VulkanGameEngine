@@ -5,6 +5,7 @@
 #include <string>
 
 namespace guk {
+
 class Image2D
 {
   public:
@@ -13,31 +14,34 @@ class Image2D
 
     VkImage get() const;
     VkImageView view() const;
+    void setSampler(VkSampler sampler);
     VkSampler sampler() const;
 
-    void transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 srcStageMask,
-                    VkAccessFlagBits2 srcAccessMask, VkPipelineStageFlagBits2 dstStageMask,
-                    VkAccessFlagBits2 dstAccessMask, VkImageLayout oldLayout,
-                    VkImageLayout newLayout, uint32_t baseMipLevel = 0,
-                    uint32_t levelCount = 1) const;
+    uint32_t width() const;
+    uint32_t height() const;
+    const VkFormat& format() const;
 
-    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
-                     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, uint32_t mipLevels = 1);
+    void createImage(VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usage,
+                     VkSampleCountFlagBits samples, uint32_t mipLevels = 1);
 
-    void createView(VkImage image, VkFormat format);
+    void createView(VkImage image, VkFormat format, uint32_t width, uint32_t height);
+    void createView(const std::unique_ptr<Image2D>& image, uint32_t baseMipLevel,
+                    uint32_t mipLevels);
 
     void createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,
-                       VkFormat format, VkImageUsageFlags usage, bool useMipmap = false);
-    void createTexture(const std::string& image, VkFormat format, VkImageUsageFlags usage,
-                       bool useMipmap = false);
+                       bool srgb = false);
+    void createTexture(const std::string& image, bool srgb = false);
 
-    void createSamplerAnisoRepeat();
-    void createSamplerAnisoClamp();
-    void createSamplerLinearRepeat();
-    void createSamplerLinearClamp();
+    void createTextureKtx2(const std::string& image, bool isSkybox = false);
+
+    void transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 stage, VkAccessFlagBits2 access,
+                    VkImageLayout layout);
+    VkImageMemoryBarrier2 barrier2(VkPipelineStageFlagBits2 stage, VkAccessFlagBits2 access,
+                                   VkImageLayout layout);
 
   private:
     std::shared_ptr<Device> device_;
+    bool imgOwner_{true};
 
     VkImage image_{};
     VkImageView view_{};
@@ -45,13 +49,24 @@ class Image2D
     VkSampler sampler_{};
 
     VkFormat format_{};
-    bool imgOwner_{true};
+    uint32_t width_{};
+    uint32_t height_{};
+
+    uint32_t baseMipLevel_{0};
+    uint32_t mipLevels_{1};
+    uint32_t arrayLayers_{1};
+
+    VkPipelineStageFlags2 currentStage_{};
+    VkAccessFlags2 currentAccess_{};
+    VkImageLayout currentLayout_{};
 
     void clean();
-    void createView();
 
-    void generateMipmap(VkCommandBuffer cmd, uint32_t mipLevels, int32_t width,
-                        int32_t height) const;
+    void createImage(VkImageUsageFlags usage, VkSampleCountFlagBits samples,
+                     VkImageCreateFlags flags, VkImageViewType viewType);
+    void createView(VkImageViewType viewType);
+
     VkImageAspectFlags aspect() const;
 };
+
 } // namespace guk

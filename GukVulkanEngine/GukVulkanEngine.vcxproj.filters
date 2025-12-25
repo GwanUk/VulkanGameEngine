@@ -12,10 +12,13 @@
     <ClCompile Include="Image2D.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="RendererGui.cpp" />
     <ClCompile Include="Swapchain.cpp" />
     <ClCompile Include="Window.cpp" />
+    <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="Buffer.cpp" />
+    <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="RendererPost.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
@@ -23,22 +26,31 @@
     <ClInclude Include="Game.h" />
     <ClInclude Include="Image2D.h" />
     <ClInclude Include="Logger.h" />
-    <ClInclude Include="Renderer.h" />
     <ClInclude Include="RendererGui.h" />
     <ClInclude Include="Swapchain.h" />
     <ClInclude Include="Window.h" />
+    <ClInclude Include="Renderer.h" />
+    <ClInclude Include="Buffer.h" />
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="RendererPost.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\test.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\test.vert">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="shaders\imgui.frag">
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\imgui.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\skybox.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\skybox.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\post_process.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\post_process.vert">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

@@ -14,13 +14,16 @@ class Swapchain
     void create(std::unique_ptr<Window>& window);
 
     const VkSwapchainKHR& get() const;
-    const std::unique_ptr<Image2D>& image(uint32_t index) const;
-    size_t size() const;
+    std::shared_ptr<Image2D> image(uint32_t index) const;
+    uint32_t size() const;
+    uint32_t width() const;
+    uint32_t height() const;
+    const VkFormat& format() const;
 
   private:
     std::shared_ptr<Device> device_;
     VkSurfaceKHR surface_{};
     VkSwapchainKHR swapchain_{};
-    std::vector<std::unique_ptr<Image2D>> images_{};
+    std::vector<std::shared_ptr<Image2D>> images_{};
 };
 } // namespace guk

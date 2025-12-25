@@ -12,6 +12,8 @@ class Window
     Window();
     ~Window();
 
+    static constexpr float aspectRatio = 16.f / 9.f;
+
     std::vector<const char*> getRequiredExts() const;
     VkSurfaceKHR createSurface(VkInstance instance) const;
     VkExtent2D getFramebufferSize() const;
@@ -28,7 +30,7 @@ class Window
     void setCursorPosCallback(GLFWcursorposfun callback) const;
     void setScrollCallback(GLFWscrollfun callback) const;
     void setFramebufferSizeCallback(GLFWframebuffersizefun callback) const;
-  
+
   private:
     GLFWwindow* window_{};
 };

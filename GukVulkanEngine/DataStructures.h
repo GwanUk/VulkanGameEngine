@@ -25,7 +25,30 @@ struct SceneUniform
     glm::mat4 proj;
 };
 
-struct PushConstants
+struct alignas(16) SkyboxUniform
+{
+    float environmentIntensity = 1.0f;
+    float roughnessLevel = 0.5f;
+    uint32_t useIrradianceMap = 0;
+    uint32_t showMipLevels = 0;
+    uint32_t showCubeFaces = 0;
+};
+
+struct alignas(16) PostUniform
+{
+    float strength = 0.0f;
+    float exposure = 1.0f;
+    float gamma = 2.2f;
+};
+
+struct BloomPushConstants
+{
+    float dx;
+    float dy;
+    float lod;
+};
+
+struct GuiPushConstants
 {
     glm::vec2 scale{1.f, 1.f};
     glm::vec2 translate{0.f, 0.f};

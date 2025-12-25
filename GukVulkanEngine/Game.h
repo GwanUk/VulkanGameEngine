@@ -3,7 +3,9 @@
 #include "Swapchain.h"
 #include "DataStructures.h"
 #include "Renderer.h"
+#include "RendererPost.h"
 #include "RendererGui.h"
+#include "Camera.h"
 
 namespace guk {
 
@@ -24,16 +26,23 @@ class Game
     std::vector<VkSemaphore> prsntSemaphores_;
 
     std::unique_ptr<Renderer> renderer_;
+    std::unique_ptr<RendererPost> rendererPost_;
     std::unique_ptr<RendererGui> rendererGui_;
 
-    MouseState mouseState_{};
     bool resized_{false};
+    MouseState mouseState_{};
+    Camera camera_{};
+
+    SceneUniform sceneUniform_{};
+    SkyboxUniform skyboxUniform_{};
+    PostUniform postUniform_{};
 
     void setCallBack();
     void createSyncObjects();
 
     void recreateSwapChain();
     void updateGui();
+    void renderHDRControlGui();
     void drawFrame();
 };
 

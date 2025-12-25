@@ -9,15 +9,15 @@ namespace guk {
 class RendererGui
 {
   public:
-    RendererGui(std::shared_ptr<Device> device);
+    RendererGui(std::shared_ptr<Device> device, VkFormat colorFormat);
     ~RendererGui();
 
     void update(uint32_t frameIdx);
-    void draw(uint32_t frameIdx, const std::unique_ptr<Image2D>& renderTarget);
+    void draw(VkCommandBuffer cmd, uint32_t frameIdx, const std::shared_ptr<Image2D> renderTarget);
 
   private:
     std::shared_ptr<Device> device_;
-    
+
     float scale_{1.4f};
 
     std::unique_ptr<Image2D> fontTexture_;
@@ -41,7 +41,7 @@ class RendererGui
     void createDescriptorSetLayout();
     void allocateDescriptorSets();
     void createPipelineLayout();
-    void createPipeline();
+    void createPipeline(VkFormat colorFormat);
 
     void createBuffer(uint32_t frameIdx, VkBufferUsageFlagBits usage, VkDeviceSize size);
 };

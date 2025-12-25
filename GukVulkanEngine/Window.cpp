@@ -12,7 +12,6 @@ Window::Window()
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    constexpr float aspectRatio = 16.f / 9.f;
     constexpr float outRatio = 0.8f;
 
     const GLFWvidmode* videoMode = glfwGetVideoMode(glfwGetPrimaryMonitor());

@@ -44,31 +44,38 @@ Device::Device(const std::vector<const char*>& instanceExtensions)
     createPipelineCache();
     createCommandPool();
     createDescriptorPool();
+    createSamplers();
 }
 
 Device::~Device()
 {
+    for (const auto& sampler : samplers_) {
+        vkDestroySampler(device_, sampler, nullptr);
+    }
+
     vkDestroyDescriptorPool(device_, descPool_, nullptr);
     vkDestroyCommandPool(device_, cmdPool_, nullptr);
     vkDestroyPipelineCache(device_, cache_, nullptr);
     vkDestroyDevice(device_, nullptr);
+
     if (debugUtilsMessenger) {
         vkDestroyDebugUtilsMessenger(instance_, debugUtilsMessenger, nullptr);
     }
+
     vkDestroyInstance(instance_, nullptr);
 }
 
-VkInstance Device::iHnd() const
+VkInstance Device::instance() const
 {
     return instance_;
 }
 
-VkPhysicalDevice Device::pHnd() const
+VkPhysicalDevice Device::physical() const
 {
-    return pDevice_;
+    return physicalDevice_;
 }
 
-VkDevice Device::hnd() const
+VkDevice Device::get() const
 {
     return device_;
 }
@@ -85,19 +92,13 @@ VkPipelineCache Device::cache() const
 
 VkFormat Device::depthStencilFormat() const
 {
-    return dsFmt_;
-}
-
-VkFormat Device::textureFormat(bool srgb) const
-{
-    int idx = srgb ? 0 : 1;
-    return texFmts_[idx];
+    return depthStencilFmt_;
 }
 
 VkSampleCountFlagBits Device::smapleCount() const
 {
     VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(pDevice_, &properties);
+    vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
 
     VkSampleCountFlags counts = properties.limits.framebufferColorSampleCounts &
                                 properties.limits.framebufferDepthSampleCounts;
@@ -115,7 +116,7 @@ VkSampleCountFlagBits Device::smapleCount() const
 void Device::checkSurfaceSupport(VkSurfaceKHR surface) const
 {
     VkBool32 presentSupport = false;
-    vkGetPhysicalDeviceSurfaceSupportKHR(pDevice_, queueFaimlyIdx_, surface, &presentSupport);
+    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, queueFaimlyIdx_, surface, &presentSupport);
 
     if (!presentSupport) {
         exitLog("Separate graphics and presenting queues are not supported yet!");
@@ -125,7 +126,7 @@ void Device::checkSurfaceSupport(VkSurfaceKHR surface) const
 uint32_t Device::getMemoryTypeIndex(uint32_t memoryType, VkMemoryPropertyFlags memoryProperty) const
 {
     VkPhysicalDeviceMemoryProperties memory{};
-    vkGetPhysicalDeviceMemoryProperties(pDevice_, &memory);
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memory);
 
     for (uint32_t i = 0; i < memory.memoryTypeCount; i++) {
         if ((memoryType & 1) &&
@@ -193,34 +194,24 @@ const VkDescriptorPool& Device::descriptorPool() const
     return descPool_;
 }
 
-VkExtent2D Device::getExtent() const
+VkSampler Device::samplerAnisoRepeat() const
 {
-    return extent_;
+    return samplers_[0];
 }
 
-void Device::setExtent(VkExtent2D extent)
+VkSampler Device::samplerAnisoClamp() const
 {
-    extent_ = extent;
+    return samplers_[1];
 }
 
-uint32_t Device::width() const
+VkSampler Device::samplerLinearRepeat() const
 {
-    return extent_.width;
+    return samplers_[2];
 }
 
-uint32_t Device::height() const
+VkSampler Device::samplerLinearClamp() const
 {
-    return extent_.height;
-}
-
-const VkFormat& Device::getColorFormat() const
-{
-    return colorFmt_;
-}
-
-void Device::setColorFormat(VkFormat format)
-{
-    colorFmt_ = format;
+    return samplers_[3];
 }
 
 void Device::createInstance(std::vector<const char*> extensions)
@@ -314,13 +305,13 @@ void Device::selectPhysicalDevice()
     std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
     vkEnumeratePhysicalDevices(instance_, &gpuCount, physicalDevices.data());
 
-    pDevice_ = physicalDevices[0];
+    physicalDevice_ = physicalDevices[0];
 
     // queue family index
     uint32_t qFamilyCnt{};
-    vkGetPhysicalDeviceQueueFamilyProperties(pDevice_, &qFamilyCnt, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &qFamilyCnt, nullptr);
     std::vector<VkQueueFamilyProperties> qFamilies{qFamilyCnt};
-    vkGetPhysicalDeviceQueueFamilyProperties(pDevice_, &qFamilyCnt, qFamilies.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &qFamilyCnt, qFamilies.data());
 
     VkQueueFlags qFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
     for (uint32_t i = 0; i < qFamilyCnt; i++) {
@@ -336,9 +327,9 @@ void Device::selectPhysicalDevice()
 
     // swapchain extesion
     uint32_t extCnt{};
-    vkEnumerateDeviceExtensionProperties(pDevice_, nullptr, &extCnt, nullptr);
+    vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCnt, nullptr);
     std::vector<VkExtensionProperties> exts(extCnt);
-    vkEnumerateDeviceExtensionProperties(pDevice_, nullptr, &extCnt, exts.data());
+    vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCnt, exts.data());
 
     if (find_if(exts.begin(), exts.end(), [=](VkExtensionProperties ext) {
             return strcmp(ext.extensionName, swapchainExtension_) == 0;
@@ -353,24 +344,14 @@ void Device::selectPhysicalDevice()
 
     auto dsFmtIt = find_if(dsfmts.begin(), dsfmts.end(), [=](VkFormat format) {
         VkFormatProperties fmt{};
-        vkGetPhysicalDeviceFormatProperties(pDevice_, format, &fmt);
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, format, &fmt);
         return fmt.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
     });
     if (dsFmtIt == dsfmts.end()) {
         exitLog("depth stencil format requestd, but not available!");
     }
 
-    dsFmt_ = *dsFmtIt;
-
-    // texture format
-    if (find_if(texFmts_.begin(), texFmts_.end(), [=](VkFormat format) {
-            VkFormatProperties fmt{};
-            vkGetPhysicalDeviceFormatProperties(pDevice_, format, &fmt);
-            return fmt.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-        }) == texFmts_.end()) {
-
-        exitLog("texture image format does not support linear blitting!");
-    }
+    depthStencilFmt_ = *dsFmtIt;
 }
 
 void Device::createDevice()
@@ -383,7 +364,7 @@ void Device::createDevice()
     queueCI.pQueuePriorities = &queuePriority;
 
     VkPhysicalDeviceFeatures deviceFeatures{};
-    vkGetPhysicalDeviceFeatures(pDevice_, &deviceFeatures);
+    vkGetPhysicalDeviceFeatures(physicalDevice_, &deviceFeatures);
 
     VkPhysicalDeviceVulkan13Features deviceFeatures13{};
     deviceFeatures13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -404,7 +385,7 @@ void Device::createDevice()
     deviceCI.ppEnabledExtensionNames = &swapchainExtension_;
     deviceCI.pNext = &deviceFeatures2;
 
-    VK_CHECK(vkCreateDevice(pDevice_, &deviceCI, nullptr, &device_));
+    VK_CHECK(vkCreateDevice(physicalDevice_, &deviceCI, nullptr, &device_));
 
     // queue
     vkGetDeviceQueue(device_, queueFaimlyIdx_, 0, &queue_);
@@ -440,17 +421,69 @@ void Device::createDescriptorPool()
 {
     std::vector<VkDescriptorPoolSize> descPoolSize(2);
     descPoolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descPoolSize[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    descPoolSize[0].descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT;
     descPoolSize[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descPoolSize[1].descriptorCount = MAX_FRAMES_IN_FLIGHT + 1;
+    descPoolSize[1].descriptorCount = 5 * MAX_FRAMES_IN_FLIGHT + 1;
 
     VkDescriptorPoolCreateInfo descPoolCI{};
     descPoolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descPoolCI.poolSizeCount = static_cast<uint32_t>(descPoolSize.size());
     descPoolCI.pPoolSizes = descPoolSize.data();
-    descPoolCI.maxSets = MAX_FRAMES_IN_FLIGHT + 1;
+    descPoolCI.maxSets = 3 * MAX_FRAMES_IN_FLIGHT + 1;
 
     VK_CHECK(vkCreateDescriptorPool(device_, &descPoolCI, nullptr, &descPool_));
+}
+
+void Device::createSamplers()
+{
+    VkPhysicalDeviceFeatures features{};
+    vkGetPhysicalDeviceFeatures(physicalDevice_, &features);
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+
+    // Aniso Repeat
+    VkSamplerCreateInfo samplerCI{};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR;
+    samplerCI.minFilter = VK_FILTER_LINEAR;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = features.samplerAnisotropy;
+    samplerCI.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCI.minLod = 0.f;
+    samplerCI.maxLod = VK_LOD_CLAMP_NONE;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
+
+    VK_CHECK(vkCreateSampler(device_, &samplerCI, nullptr, &samplers_[0]));
+
+    // Aniso Clamp
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+    VK_CHECK(vkCreateSampler(device_, &samplerCI, nullptr, &samplers_[1]));
+
+    // Linear Repeat
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.anisotropyEnable = VK_FALSE;
+    samplerCI.maxAnisotropy = 1.f;
+
+    VK_CHECK(vkCreateSampler(device_, &samplerCI, nullptr, &samplers_[2]));
+
+    // Linear Clamp
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+    VK_CHECK(vkCreateSampler(device_, &samplerCI, nullptr, &samplers_[3]));
 }
 
 VkShaderModule Device::createShaderModule(const std::string& spv) const
