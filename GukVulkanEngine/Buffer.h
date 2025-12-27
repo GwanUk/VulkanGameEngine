@@ -13,7 +13,7 @@ class Buffer
     void createStagingBuffer(void* data, VkDeviceSize size);
     void createUniformBuffers(uint32_t size);
 
-    VkBuffer get();
+    VkBuffer get() const;
 
     template <typename T_DATA>
     void update(const T_DATA& data)

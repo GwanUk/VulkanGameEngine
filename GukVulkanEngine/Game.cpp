@@ -250,7 +250,7 @@ void Game::drawFrame()
 
     renderer_->updateScene(frameIdx, sceneUniform_);
     renderer_->updateSkybox(frameIdx, skyboxUniform_);
-    rendererPost_->updatePost(frameIdx, postUniform_);
+    rendererPost_->updatePostUniform(frameIdx, postUniform_);
     rendererGui_->update(frameIdx);
 
     VK_CHECK(vkResetFences(device_->get(), 1, &fences_[frameIdx]));

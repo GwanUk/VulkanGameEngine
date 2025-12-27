@@ -53,5 +53,11 @@
     <None Include="shaders\post_process.vert">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\bloom_down.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\bloom_up.frag">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

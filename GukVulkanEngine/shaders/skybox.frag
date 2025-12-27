@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec3 inPos;
 
-layout(set = 1, binding = 0) uniform SkyboxUniform {
+layout(set = 0, binding = 1) uniform SkyboxUniform {
     float environmentIntensity;
     float roughnessLevel;
     uint useIrradianceMap;
@@ -10,9 +10,9 @@ layout(set = 1, binding = 0) uniform SkyboxUniform {
     uint showCubeFaces;
 } skyOptions;
 
-layout(set = 1, binding = 1) uniform samplerCube prefilteredMap;
-layout(set = 1, binding = 2) uniform samplerCube irradianceMap;
-layout(set = 1, binding = 3) uniform sampler2D brdfLUT;
+layout(set = 1, binding = 0) uniform samplerCube prefilteredMap;
+layout(set = 1, binding = 1) uniform samplerCube irradianceMap;
+layout(set = 1, binding = 2) uniform sampler2D brdfLUT;
 
 layout(location = 0) out vec4 outColor;
 

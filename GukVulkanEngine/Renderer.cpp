@@ -115,10 +115,9 @@ void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx)
     scissor.extent = {colorAttachment_->width(), colorAttachment_->height()};
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
-                            &descriptorSetsScene_[frameIdx], 0, nullptr);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 1, 1,
-                            &descriptorSetsSkybox_[frameIdx], 0, nullptr);
+    std::array<VkDescriptorSet, 2> sets{uniformDescriptorSets_[frameIdx], samplerDescriptorSet_};
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0,
+                            static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
 
     vkCmdDraw(cmd, 36, 1, 0, 0);
 
@@ -160,44 +159,43 @@ void Renderer::createTextures()
 
 void Renderer::createDescriptorSetLayout()
 {
+    std::array<VkDescriptorSetLayoutBinding, 2> uniformLayoutBindings{};
+    uniformLayoutBindings[0].binding = 0;
+    uniformLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniformLayoutBindings[0].descriptorCount = 1;
+    uniformLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    uniformLayoutBindings[1].binding = 1;
+    uniformLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniformLayoutBindings[1].descriptorCount = 1;
+    uniformLayoutBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo descSetLayoutCI{
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-
-    std::array<VkDescriptorSetLayoutBinding, 1> layoutBindingScene{};
-    layoutBindingScene[0].binding = 0;
-    layoutBindingScene[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layoutBindingScene[0].descriptorCount = 1;
-    layoutBindingScene[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    descSetLayoutCI.bindingCount = static_cast<uint32_t>(layoutBindingScene.size());
-    descSetLayoutCI.pBindings = layoutBindingScene.data();
+    descSetLayoutCI.bindingCount = static_cast<uint32_t>(uniformLayoutBindings.size());
+    descSetLayoutCI.pBindings = uniformLayoutBindings.data();
 
     VK_CHECK(vkCreateDescriptorSetLayout(device_->get(), &descSetLayoutCI, nullptr,
                                          &descriptorSetLayouts_[0]));
 
-    std::array<VkDescriptorSetLayoutBinding, 4> layoutBindingSkybox{};
-    layoutBindingSkybox[0].binding = 0;
-    layoutBindingSkybox[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layoutBindingSkybox[0].descriptorCount = 1;
-    layoutBindingSkybox[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    std::array<VkDescriptorSetLayoutBinding, 3> samplerLayoutBindings{};
+    samplerLayoutBindings[0].binding = 0;
+    samplerLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBindings[0].descriptorCount = 1;
+    samplerLayoutBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    layoutBindingSkybox[1].binding = 1;
-    layoutBindingSkybox[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layoutBindingSkybox[1].descriptorCount = 1;
-    layoutBindingSkybox[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    samplerLayoutBindings[1].binding = 1;
+    samplerLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBindings[1].descriptorCount = 1;
+    samplerLayoutBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    layoutBindingSkybox[2].binding = 2;
-    layoutBindingSkybox[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layoutBindingSkybox[2].descriptorCount = 1;
-    layoutBindingSkybox[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    samplerLayoutBindings[2].binding = 2;
+    samplerLayoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBindings[2].descriptorCount = 1;
+    samplerLayoutBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    layoutBindingSkybox[3].binding = 3;
-    layoutBindingSkybox[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layoutBindingSkybox[3].descriptorCount = 1;
-    layoutBindingSkybox[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    descSetLayoutCI.bindingCount = static_cast<uint32_t>(layoutBindingSkybox.size());
-    descSetLayoutCI.pBindings = layoutBindingSkybox.data();
+    descSetLayoutCI.bindingCount = static_cast<uint32_t>(samplerLayoutBindings.size());
+    descSetLayoutCI.pBindings = samplerLayoutBindings.data();
 
     VK_CHECK(vkCreateDescriptorSetLayout(device_->get(), &descSetLayoutCI, nullptr,
                                          &descriptorSetLayouts_[1]));
@@ -205,89 +203,90 @@ void Renderer::createDescriptorSetLayout()
 
 void Renderer::allocateDescriptorSets()
 {
-    std::vector<VkDescriptorSetLayout> layoutsScene(Device::MAX_FRAMES_IN_FLIGHT,
-                                                    descriptorSetLayouts_[0]);
-    std::vector<VkDescriptorSetLayout> layoutsSkybox(Device::MAX_FRAMES_IN_FLIGHT,
-                                                     descriptorSetLayouts_[1]);
-
+    // uniform buffer
+    std::vector<VkDescriptorSetLayout> uniformLayouts(Device::MAX_FRAMES_IN_FLIGHT,
+                                                      descriptorSetLayouts_[0]);
     VkDescriptorSetAllocateInfo descSetAI{};
     descSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     descSetAI.descriptorPool = device_->descriptorPool();
-    descSetAI.descriptorSetCount = Device::MAX_FRAMES_IN_FLIGHT;
+    descSetAI.descriptorSetCount = static_cast<uint32_t>(uniformLayouts.size());
+    descSetAI.pSetLayouts = uniformLayouts.data();
 
-    descSetAI.pSetLayouts = layoutsScene.data();
-    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, descriptorSetsScene_.data()));
-
-    descSetAI.pSetLayouts = layoutsSkybox.data();
-    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, descriptorSetsSkybox_.data()));
+    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, uniformDescriptorSets_.data()));
 
     for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorBufferInfo sceneBufferInfo{};
-        sceneBufferInfo.buffer = sceneUniformBuffers_[i]->get();
-        sceneBufferInfo.range = sizeof(SceneUniform);
+        VkDescriptorBufferInfo sceneUniformInfo{};
+        sceneUniformInfo.buffer = sceneUniformBuffers_[i]->get();
+        sceneUniformInfo.range = sizeof(SceneUniform);
 
-        std::array<VkWriteDescriptorSet, 1> writeScene{};
-        writeScene[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeScene[0].dstSet = descriptorSetsScene_[i];
-        writeScene[0].dstBinding = 0;
-        writeScene[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writeScene[0].descriptorCount = 1;
-        writeScene[0].pBufferInfo = &sceneBufferInfo;
+        VkDescriptorBufferInfo skyboxUniformInfo{};
+        skyboxUniformInfo.buffer = skyboxUniformBuffers_[i]->get();
+        skyboxUniformInfo.range = sizeof(SkyboxUniform);
 
-        vkUpdateDescriptorSets(device_->get(), static_cast<uint32_t>(writeScene.size()),
-                               writeScene.data(), 0, nullptr);
+        std::array<VkWriteDescriptorSet, 2> writeUniform{};
+        writeUniform[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeUniform[0].dstSet = uniformDescriptorSets_[i];
+        writeUniform[0].dstBinding = 0;
+        writeUniform[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeUniform[0].descriptorCount = 1;
+        writeUniform[0].pBufferInfo = &sceneUniformInfo;
 
-        VkDescriptorBufferInfo skyboxBufferInfo{};
-        skyboxBufferInfo.buffer = skyboxUniformBuffers_[i]->get();
-        skyboxBufferInfo.range = sizeof(SkyboxUniform);
+        writeUniform[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeUniform[1].dstSet = uniformDescriptorSets_[i];
+        writeUniform[1].dstBinding = 1;
+        writeUniform[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeUniform[1].descriptorCount = 1;
+        writeUniform[1].pBufferInfo = &skyboxUniformInfo;
 
-        VkDescriptorImageInfo prefilteredInfo{};
-        prefilteredInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        prefilteredInfo.imageView = skyboxTextures_[0]->view();
-        prefilteredInfo.sampler = skyboxTextures_[0]->sampler();
-
-        VkDescriptorImageInfo irradianceInfo{};
-        irradianceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        irradianceInfo.imageView = skyboxTextures_[1]->view();
-        irradianceInfo.sampler = skyboxTextures_[1]->sampler();
-
-        VkDescriptorImageInfo brdfLutInfo{};
-        brdfLutInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        brdfLutInfo.imageView = skyboxTextures_[2]->view();
-        brdfLutInfo.sampler = skyboxTextures_[2]->sampler();
-
-        std::array<VkWriteDescriptorSet, 4> writeSkybox{};
-        writeSkybox[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSkybox[0].dstSet = descriptorSetsSkybox_[i];
-        writeSkybox[0].dstBinding = 0;
-        writeSkybox[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writeSkybox[0].descriptorCount = 1;
-        writeSkybox[0].pBufferInfo = &skyboxBufferInfo;
-
-        writeSkybox[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSkybox[1].dstSet = descriptorSetsSkybox_[i];
-        writeSkybox[1].dstBinding = 1;
-        writeSkybox[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSkybox[1].descriptorCount = 1;
-        writeSkybox[1].pImageInfo = &prefilteredInfo;
-
-        writeSkybox[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSkybox[2].dstSet = descriptorSetsSkybox_[i];
-        writeSkybox[2].dstBinding = 2;
-        writeSkybox[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSkybox[2].descriptorCount = 1;
-        writeSkybox[2].pImageInfo = &irradianceInfo;
-
-        writeSkybox[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSkybox[3].dstSet = descriptorSetsSkybox_[i];
-        writeSkybox[3].dstBinding = 3;
-        writeSkybox[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSkybox[3].descriptorCount = 1;
-        writeSkybox[3].pImageInfo = &brdfLutInfo;
-
-        vkUpdateDescriptorSets(device_->get(), static_cast<uint32_t>(writeSkybox.size()),
-                               writeSkybox.data(), 0, nullptr);
+        vkUpdateDescriptorSets(device_->get(), static_cast<uint32_t>(writeUniform.size()),
+                               writeUniform.data(), 0, nullptr);
     }
+
+    // sampler texture
+    descSetAI.descriptorSetCount = 1;
+    descSetAI.pSetLayouts = &descriptorSetLayouts_[1];
+
+    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, &samplerDescriptorSet_));
+
+    VkDescriptorImageInfo prefilteredInfo{};
+    prefilteredInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    prefilteredInfo.imageView = skyboxTextures_[0]->view();
+    prefilteredInfo.sampler = skyboxTextures_[0]->sampler();
+
+    VkDescriptorImageInfo irradianceInfo{};
+    irradianceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    irradianceInfo.imageView = skyboxTextures_[1]->view();
+    irradianceInfo.sampler = skyboxTextures_[1]->sampler();
+
+    VkDescriptorImageInfo brdfLutInfo{};
+    brdfLutInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    brdfLutInfo.imageView = skyboxTextures_[2]->view();
+    brdfLutInfo.sampler = skyboxTextures_[2]->sampler();
+
+    std::array<VkWriteDescriptorSet, 3> writeSampler{};
+    writeSampler[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSampler[0].dstSet = samplerDescriptorSet_;
+    writeSampler[0].dstBinding = 0;
+    writeSampler[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writeSampler[0].descriptorCount = 1;
+    writeSampler[0].pImageInfo = &prefilteredInfo;
+
+    writeSampler[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSampler[1].dstSet = samplerDescriptorSet_;
+    writeSampler[1].dstBinding = 1;
+    writeSampler[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writeSampler[1].descriptorCount = 1;
+    writeSampler[1].pImageInfo = &irradianceInfo;
+
+    writeSampler[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSampler[2].dstSet = samplerDescriptorSet_;
+    writeSampler[2].dstBinding = 2;
+    writeSampler[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writeSampler[2].descriptorCount = 1;
+    writeSampler[2].pImageInfo = &brdfLutInfo;
+
+    vkUpdateDescriptorSets(device_->get(), static_cast<uint32_t>(writeSampler.size()),
+                           writeSampler.data(), 0, nullptr);
 }
 
 void Renderer::createPipelineLayout()

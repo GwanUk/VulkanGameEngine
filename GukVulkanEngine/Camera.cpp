@@ -7,8 +7,6 @@ Camera::Camera()
     view_ =
         glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
 
-    view_ = glm::mat4(1.0f);
-
     projective_ = glm::perspectiveRH_ZO(glm::radians(fov), Window::aspectRatio, znear, zfar);
     projective_[1][1] *= -1;
 }
@@ -24,7 +22,7 @@ void Camera::rotate(float yaw, float pitch)
     view_ = rotMat * transMat;
 }
 
-void Camera::updateScene(SceneUniform& sceneUniform)
+void Camera::updateScene(SceneUniform& sceneUniform) const
 {
     sceneUniform.view = view_;
     sceneUniform.proj = projective_;

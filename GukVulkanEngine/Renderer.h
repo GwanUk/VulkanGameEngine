@@ -34,8 +34,8 @@ class Renderer
     std::array<std::unique_ptr<Image2D>, 3> skyboxTextures_;
 
     std::array<VkDescriptorSetLayout, 2> descriptorSetLayouts_{};
-    std::array<VkDescriptorSet, Device::MAX_FRAMES_IN_FLIGHT> descriptorSetsScene_{};
-    std::array<VkDescriptorSet, Device::MAX_FRAMES_IN_FLIGHT> descriptorSetsSkybox_{};
+    std::array<VkDescriptorSet, Device::MAX_FRAMES_IN_FLIGHT> uniformDescriptorSets_{};
+    VkDescriptorSet samplerDescriptorSet_{};
 
     VkPipelineLayout pipelineLayout_{};
     VkPipeline pipelineSkybox_{};

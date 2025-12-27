@@ -36,16 +36,15 @@ struct alignas(16) SkyboxUniform
 
 struct alignas(16) PostUniform
 {
-    float strength = 0.0f;
+    float strength = 0.12f;
     float exposure = 1.0f;
     float gamma = 2.2f;
 };
 
 struct BloomPushConstants
 {
-    float dx;
-    float dy;
-    float lod;
+    float width;
+    float height;
 };
 
 struct GuiPushConstants

@@ -8,9 +8,8 @@ layout(set = 0, binding = 0) uniform PostUniform {
     float gamma;
 } postUniform;
 
-layout(set = 0, binding = 1) uniform sampler2D sceneTexture;
-layout(set = 0, binding = 2) uniform sampler2D bloomTexture;
-
+layout(set = 1, binding = 0) uniform sampler2D bloomTexture;
+layout(set = 2, binding = 0) uniform sampler2D sceneTexture;
 
 layout(location = 0) out vec4 outColor;
 
@@ -19,7 +18,7 @@ void main()
     vec3 color0 = texture(sceneTexture, inUV).rgb;
     vec3 color1 = texture(bloomTexture, inUV).rgb;
 
-    vec3 color = (1.0 - postUniform.strength) * color0 + postUniform.strength * color1;
+    vec3 color = mix(color0, color1, postUniform.strength);
 
     color = clamp(postUniform.exposure * color, 0.0, 1.0);
     color = pow(color, vec3(1.0 / postUniform.gamma));

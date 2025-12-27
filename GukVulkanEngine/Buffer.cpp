@@ -38,7 +38,7 @@ void Buffer::createUniformBuffers(uint32_t size)
     createMappedBuffer(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 }
 
-VkBuffer Buffer::get()
+VkBuffer Buffer::get() const
 {
     return buffer_;
 }

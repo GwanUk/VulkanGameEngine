@@ -12,7 +12,7 @@ class Camera
     Camera();
 
     void rotate(float yaw, float pitch);
-    void updateScene(SceneUniform& sceneUniform);
+    void updateScene(SceneUniform& sceneUniform) const;
 
   private:
     float fov{75.f};

@@ -54,16 +54,18 @@ const VkFormat& Image2D::format() const
 }
 
 void Image2D::createImage(VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usage,
-                          VkSampleCountFlagBits samples, uint32_t mipLevels)
+                          VkSampleCountFlagBits samples, uint32_t baseMipLevel, uint32_t mipLevels)
 {
     format_ = format;
     width_ = width;
     height_ = height;
+    baseMipLevel_ = baseMipLevel;
     mipLevels_ = mipLevels;
     createImage(usage, samples, 0, VK_IMAGE_VIEW_TYPE_2D);
 }
 
-void Image2D::createView(VkImage image, VkFormat format, uint32_t width, uint32_t height)
+void Image2D::createView(VkImage image, VkFormat format, uint32_t width, uint32_t height,
+                         uint32_t baseMipLevel, uint32_t mipLevels)
 {
     clean();
     imgOwner_ = false;
@@ -72,16 +74,9 @@ void Image2D::createView(VkImage image, VkFormat format, uint32_t width, uint32_
     format_ = format;
     width_ = width;
     height_ = height;
-    createView(VK_IMAGE_VIEW_TYPE_2D);
-}
-
-void Image2D::createView(const std::unique_ptr<Image2D>& image, uint32_t baseMipLevel,
-                         uint32_t mipLevels)
-{
     baseMipLevel_ = baseMipLevel;
     mipLevels_ = mipLevels;
-
-    createView(image->get(), image->format(), image->width(), image->height());
+    createView(VK_IMAGE_VIEW_TYPE_2D);
 }
 
 void Image2D::createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,

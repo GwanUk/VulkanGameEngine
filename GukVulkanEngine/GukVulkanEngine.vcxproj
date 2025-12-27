@@ -163,6 +163,8 @@
     <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\bloom_down.frag" />
+    <None Include="shaders\bloom_up.frag" />
     <None Include="shaders\imgui.frag" />
     <None Include="shaders\imgui.vert" />
     <None Include="shaders\post_process.frag" />

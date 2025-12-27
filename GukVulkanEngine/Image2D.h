@@ -22,11 +22,11 @@ class Image2D
     const VkFormat& format() const;
 
     void createImage(VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usage,
-                     VkSampleCountFlagBits samples, uint32_t mipLevels = 1);
+                     VkSampleCountFlagBits samples, uint32_t baseMipLevel = 0,
+                     uint32_t mipLevels = 1);
 
-    void createView(VkImage image, VkFormat format, uint32_t width, uint32_t height);
-    void createView(const std::unique_ptr<Image2D>& image, uint32_t baseMipLevel,
-                    uint32_t mipLevels);
+    void createView(VkImage image, VkFormat format, uint32_t width, uint32_t height,
+                    uint32_t baseMipLevel = 0, uint32_t mipLevels = 1);
 
     void createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,
                        bool srgb = false);
