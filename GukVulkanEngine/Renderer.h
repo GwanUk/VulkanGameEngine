@@ -3,6 +3,7 @@
 #include "Image2D.h"
 #include "Buffer.h"
 #include "DataStructures.h"
+#include "Model.h"
 
 namespace guk {
 
@@ -12,14 +13,16 @@ class Renderer
     Renderer(std::shared_ptr<Device> device, uint32_t width, uint32_t height);
     ~Renderer();
 
+    void allocateModelDescriptorSets(std::vector<Model>& models);
     void createAttachments(uint32_t width, uint32_t height);
 
     void updateScene(uint32_t frameIdx, SceneUniform sceneUniform);
     void updateSkybox(uint32_t frameIdx, SkyboxUniform skyboxUniform);
 
-    void draw(VkCommandBuffer cmd, uint32_t frameIdx);
+    void draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> models);
 
     std::shared_ptr<Image2D> colorAttachment() const;
+
 
   private:
     std::shared_ptr<Device> device_;
@@ -32,12 +35,14 @@ class Renderer
     std::array<std::unique_ptr<Buffer>, Device::MAX_FRAMES_IN_FLIGHT> sceneUniformBuffers_;
     std::array<std::unique_ptr<Buffer>, Device::MAX_FRAMES_IN_FLIGHT> skyboxUniformBuffers_;
     std::array<std::unique_ptr<Image2D>, 3> skyboxTextures_;
+    std::shared_ptr<Image2D> dummyTexture_{};
 
-    std::array<VkDescriptorSetLayout, 2> descriptorSetLayouts_{};
+    std::array<VkDescriptorSetLayout, 3> descriptorSetLayouts_{};
     std::array<VkDescriptorSet, Device::MAX_FRAMES_IN_FLIGHT> uniformDescriptorSets_{};
     VkDescriptorSet samplerDescriptorSet_{};
 
     VkPipelineLayout pipelineLayout_{};
+    VkPipeline pipeline_{};
     VkPipeline pipelineSkybox_{};
 
     void createUniform();
@@ -45,8 +50,9 @@ class Renderer
 
     void createDescriptorSetLayout();
     void allocateDescriptorSets();
-    void createPipelineLayout();
 
+    void createPipelineLayout();
+    void createPipeline();
     void createPipelineSkybox();
 };
 

@@ -19,6 +19,8 @@
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="RendererPost.cpp" />
+    <ClCompile Include="Model.cpp" />
+    <ClCompile Include="Mesh.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
@@ -33,6 +35,8 @@
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="RendererPost.h" />
+    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Model.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\imgui.frag">
@@ -57,6 +61,12 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\bloom_up.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pbr.vert">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

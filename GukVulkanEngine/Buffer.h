@@ -10,10 +10,11 @@ class Buffer
     Buffer(std::shared_ptr<Device> device);
     ~Buffer();
 
-    void createStagingBuffer(void* data, VkDeviceSize size);
-    void createUniformBuffers(uint32_t size);
+    void createStagingBuffer(const void* data, VkDeviceSize size);
+    void createUniformBuffer(VkDeviceSize size);
+    void createLocalBuffer(const void* data, VkDeviceSize size, VkBufferUsageFlagBits usage);
 
-    VkBuffer get() const;
+    const VkBuffer& get() const;
 
     template <typename T_DATA>
     void update(const T_DATA& data)
@@ -30,7 +31,7 @@ class Buffer
     VkDeviceMemory memory_{};
     void* mappedMemory_{};
 
-    void createMappedBuffer(VkDeviceSize size, VkBufferUsageFlags usage);
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags property);
 };
 
 } // namespace guk

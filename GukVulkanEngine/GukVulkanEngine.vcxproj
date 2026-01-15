@@ -139,6 +139,8 @@
     <ClCompile Include="DataStructures.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="Game.cpp" />
+    <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="Model.cpp" />
     <ClCompile Include="RendererGui.cpp" />
     <ClCompile Include="Image2D.cpp" />
     <ClCompile Include="Main.cpp" />
@@ -154,6 +156,8 @@
     <ClInclude Include="DataStructures.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Model.h" />
     <ClInclude Include="RendererGui.h" />
     <ClInclude Include="Image2D.h" />
     <ClInclude Include="Logger.h" />
@@ -167,6 +171,8 @@
     <None Include="shaders\bloom_up.frag" />
     <None Include="shaders\imgui.frag" />
     <None Include="shaders\imgui.vert" />
+    <None Include="shaders\pbr.frag" />
+    <None Include="shaders\pbr.vert" />
     <None Include="shaders\post_process.frag" />
     <None Include="shaders\post_process.vert" />
     <None Include="shaders\skybox.frag" />

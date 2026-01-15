@@ -33,12 +33,15 @@ class Game
     MouseState mouseState_{};
     Camera camera_{};
 
+    std::vector<Model> models_{};
+
     SceneUniform sceneUniform_{};
     SkyboxUniform skyboxUniform_{};
     PostUniform postUniform_{};
 
     void setCallBack();
     void createSyncObjects();
+    void createModels();
 
     void recreateSwapChain();
     void updateGui();

@@ -9,9 +9,9 @@ namespace guk {
 struct Vertex
 {
   public:
-    glm::vec3 pos;
-    glm::vec2 uv;
-    glm::vec3 col;
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 texcoord;
 
     static VkVertexInputBindingDescription getBindingDescrption();
     static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
@@ -20,9 +20,22 @@ struct Vertex
 struct SceneUniform
 {
   public:
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    glm::mat4 model = glm::mat4(1.f);
+    glm::mat4 view = glm::mat4(1.f);
+    glm::mat4 proj = glm::mat4(1.f);
+};
+
+struct MaterialUniform
+{
+    glm::vec4 emissiveFactor_ = glm::vec4(0.0f);
+    glm::vec4 baseColorFactor_ = glm::vec4(1.0f);
+    float roughness_ = 1.0f;
+    float metallicFactor_ = 0.0f;
+    int32_t baseColorTextureIndex_ = -1;
+    int32_t emissiveTextureIndex_ = -1;
+    int32_t normalTextureIndex_ = -1;
+    int32_t metallicRoughnessTextureIndex_ = -1;
+    int32_t occlusionTextureIndex_ = -1;
 };
 
 struct alignas(16) SkyboxUniform
@@ -63,16 +76,5 @@ struct MouseState
     } buttons;
     glm::vec2 position{0.0f, 0.0f};
 };
-
-static const std::vector<Vertex> vertices{{{-0.5f, -0.5f, 0.f}, {1.f, 0.f}, {1.f, 0.f, 0.f}},
-                                          {{0.5f, -0.5f, 0.f}, {0.f, 0.f}, {0.f, 1.f, 0.f}},
-                                          {{0.5f, 0.5f, 0.f}, {0.f, 1.f}, {0.f, 0.f, 1.f}},
-                                          {{-0.5f, 0.5f, 0.f}, {1.f, 1.f}, {1.f, 1.f, 1.f}},
-                                          {{-0.5f, -0.5f, -0.5f}, {1.f, 0.f}, {1.f, 0.f, 0.f}},
-                                          {{0.5f, -0.5f, -0.5f}, {0.f, 0.f}, {0.f, 1.f, 0.f}},
-                                          {{0.5f, 0.5f, -0.5f}, {0.f, 1.f}, {0.f, 0.f, 1.f}},
-                                          {{-0.5f, 0.5f, -0.5f}, {1.f, 1.f}, {1.f, 1.f, 1.f}}};
-
-static const std::vector<uint16_t> indices{0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
 } // namespace guk

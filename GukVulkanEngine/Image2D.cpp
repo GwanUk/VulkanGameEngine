@@ -79,8 +79,8 @@ void Image2D::createView(VkImage image, VkFormat format, uint32_t width, uint32_
     createView(VK_IMAGE_VIEW_TYPE_2D);
 }
 
-void Image2D::createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,
-                            bool srgb)
+void Image2D::createTexture(const unsigned char* data, uint32_t width, uint32_t height,
+                            uint32_t channels, bool srgb)
 {
     format_ = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     width_ = width;
@@ -125,13 +125,32 @@ void Image2D::createTexture(unsigned char* data, uint32_t width, uint32_t height
 void Image2D::createTexture(const std::string& image, bool srgb)
 {
     int width, height, ch;
+
     unsigned char* data = stbi_load(image.c_str(), &width, &height, &ch, STBI_rgb_alpha);
+
     if (!data) {
         exitLog("failed to load image: {}", image);
     }
 
     createTexture(data, width, height, 4, srgb);
+
     stbi_image_free(data);
+}
+
+void Image2D::createTextureFromMemory(const unsigned char* data, int size, bool srgb)
+{
+    int width, height, ch;
+
+    unsigned char* newData =
+        stbi_load_from_memory(data, size, &width, &height, &ch, STBI_rgb_alpha);
+
+    if (!newData) {
+        exitLog("failed to load data from memory");
+    }
+
+    createTexture(newData, width, height, 4, srgb);
+
+    stbi_image_free(newData);
 }
 
 void Image2D::createTextureKtx2(const std::string& image, bool isSkybox)
@@ -176,6 +195,7 @@ void Image2D::createTextureKtx2(const std::string& image, bool isSkybox)
             }
 
             VkBufferImageCopy copy{};
+            copy.bufferOffset = offset;
             copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copy.imageSubresource.mipLevel = level;
             copy.imageSubresource.baseArrayLayer = layer;
@@ -183,7 +203,6 @@ void Image2D::createTextureKtx2(const std::string& image, bool isSkybox)
             copy.imageExtent.width = std::max(1u, width_ >> level);
             copy.imageExtent.height = std::max(1u, height_ >> level);
             copy.imageExtent.depth = 1;
-            copy.bufferOffset = offset;
 
             copies.push_back(copy);
         }

@@ -28,11 +28,12 @@ class Image2D
     void createView(VkImage image, VkFormat format, uint32_t width, uint32_t height,
                     uint32_t baseMipLevel = 0, uint32_t mipLevels = 1);
 
-    void createTexture(unsigned char* data, uint32_t width, uint32_t height, uint32_t channels,
-                       bool srgb = false);
-    void createTexture(const std::string& image, bool srgb = false);
+    void createTexture(const unsigned char* data, uint32_t width, uint32_t height,
+                       uint32_t channels, bool srgb);
+    void createTexture(const std::string& image, bool srgb);
+    void createTextureFromMemory(const unsigned char* data, int size, bool srgb);
 
-    void createTextureKtx2(const std::string& image, bool isSkybox = false);
+    void createTextureKtx2(const std::string& image, bool isSkybox);
 
     void transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 stage, VkAccessFlagBits2 access,
                     VkImageLayout layout);

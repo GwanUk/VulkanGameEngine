@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "Logger.h"
+#include "Model.h"
 
 #include <imgui.h>
 
@@ -17,6 +18,8 @@ Game::Game()
 {
     setCallBack();
     createSyncObjects();
+    createModels();
+    renderer_->allocateModelDescriptorSets(models_);
 }
 
 Game::~Game()
@@ -122,6 +125,15 @@ void Game::createSyncObjects()
         VK_CHECK(vkCreateSemaphore(device_->get(), &semaphoreInfo, nullptr, &drawSemaphores_[i]));
         VK_CHECK(vkCreateSemaphore(device_->get(), &semaphoreInfo, nullptr, &prsntSemaphores_[i]));
     }
+}
+
+void Game::createModels()
+{
+    Model model{device_};
+    model.load("C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\DamagedHelmet\\glTF-"
+               "Binary\\DamagedHelmet.glb");
+
+    models_.push_back(model);
 }
 
 void Game::recreateSwapChain()
@@ -268,7 +280,7 @@ void Game::drawFrame()
                                             VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-    renderer_->draw(cmd, frameIdx);
+    renderer_->draw(cmd, frameIdx, models_);
     rendererPost_->draw(cmd, frameIdx, swapchain_->image(imageIdx));
     rendererGui_->draw(cmd, frameIdx, swapchain_->image(imageIdx));
 

@@ -240,7 +240,7 @@ void RendererPost::createUniform()
 {
     for (uint32_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
         postUniformBuffers_[i] = std::make_unique<Buffer>(device_);
-        postUniformBuffers_[i]->createUniformBuffers(sizeof(PostUniform));
+        postUniformBuffers_[i]->createUniformBuffer(sizeof(PostUniform));
     }
 }
 

@@ -421,15 +421,15 @@ void Device::createDescriptorPool()
 {
     std::vector<VkDescriptorPoolSize> descPoolSize(2);
     descPoolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descPoolSize[0].descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT;
+    descPoolSize[0].descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT + 2;
     descPoolSize[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descPoolSize[1].descriptorCount = 6 + 5 + 1;
+    descPoolSize[1].descriptorCount = 6 + 5 + 1 + 10;
 
     VkDescriptorPoolCreateInfo descPoolCI{};
     descPoolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descPoolCI.poolSizeCount = static_cast<uint32_t>(descPoolSize.size());
     descPoolCI.pPoolSizes = descPoolSize.data();
-    descPoolCI.maxSets = 4 + 7;
+    descPoolCI.maxSets = 4 + 7 + 2;
 
     VK_CHECK(vkCreateDescriptorPool(device_, &descPoolCI, nullptr, &descPool_));
 }

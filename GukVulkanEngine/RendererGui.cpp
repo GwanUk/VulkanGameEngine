@@ -198,7 +198,7 @@ void RendererGui::init()
         exitLog("Failed to load font data from: {}", font);
     }
 
-    fontTexture_->createTexture(data, width, height, 4);
+    fontTexture_->createTexture(data, width, height, 4, false);
     fontTexture_->setSampler(device_->samplerAnisoRepeat());
 }
 
