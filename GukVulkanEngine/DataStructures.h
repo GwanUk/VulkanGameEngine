@@ -8,7 +8,6 @@ namespace guk {
 
 struct Vertex
 {
-  public:
     glm::vec3 position;
     glm::vec3 normal;
     glm::vec2 texcoord;
@@ -19,8 +18,6 @@ struct Vertex
 
 struct SceneUniform
 {
-  public:
-    glm::mat4 model = glm::mat4(1.f);
     glm::mat4 view = glm::mat4(1.f);
     glm::mat4 proj = glm::mat4(1.f);
 };

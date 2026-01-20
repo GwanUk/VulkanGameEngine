@@ -3,6 +3,7 @@
 #include "Model.h"
 
 #include <imgui.h>
+#include <chrono>
 
 namespace guk {
 
@@ -36,9 +37,24 @@ Game::~Game()
 
 void Game::run()
 {
+    auto lastTime = std::chrono::high_resolution_clock::now();
+
     while (!window_->shouldClose()) {
         window_->pollEvents();
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float deltaTime =
+            std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime)
+                .count();
+        lastTime = currentTime;
+
+        deltaTime = glm::min(deltaTime, 0.033f); // Max 33ms (30 FPS minimum)
+
         updateGui();
+
+        camera_.update(deltaTime);
+        camera_.updateScene(sceneUniform_);
+
         drawFrame();
     }
 
@@ -53,8 +69,53 @@ void Game::setCallBack()
         app->resized_ = true;
     });
     window_->setKeyCallback([](GLFWwindow* window, int key, int scancode, int action, int mods) {
-        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        auto app = reinterpret_cast<Game*>(glfwGetWindowUserPointer(window));
+
+        if (action == GLFW_PRESS) {
+            switch (key) {
+            case GLFW_KEY_W:
+                app->camera_.forward = true;
+                break;
+            case GLFW_KEY_S:
+                app->camera_.backward = true;
+                break;
+            case GLFW_KEY_A:
+                app->camera_.left = true;
+                break;
+            case GLFW_KEY_D:
+                app->camera_.right = true;
+                break;
+            case GLFW_KEY_E:
+                app->camera_.down = true;
+                break;
+            case GLFW_KEY_Q:
+                app->camera_.up = true;
+                break;
+            case GLFW_KEY_ESCAPE:
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+                break;
+            }
+        } else if (action == GLFW_RELEASE) {
+            switch (key) {
+            case GLFW_KEY_W:
+                app->camera_.forward = false;
+                break;
+            case GLFW_KEY_S:
+                app->camera_.backward = false;
+                break;
+            case GLFW_KEY_A:
+                app->camera_.left = false;
+                break;
+            case GLFW_KEY_D:
+                app->camera_.right = false;
+                break;
+            case GLFW_KEY_E:
+                app->camera_.down = false;
+                break;
+            case GLFW_KEY_Q:
+                app->camera_.up = false;
+                break;
+            }
         }
     });
     window_->setMouseButtonCallback([](GLFWwindow* window, int button, int action, int mods) {
@@ -94,11 +155,8 @@ void Game::setCallBack()
         float x(static_cast<float>(xpos));
         float y(static_cast<float>(ypos));
 
-        float dx = app->mouseState_.position.x - x;
-        float dy = app->mouseState_.position.y - y;
-
-        if (app->mouseState_.buttons.left) {
-            app->camera_.rotate(dx, dy);
+        if (!ImGui::GetIO().WantCaptureMouse && app->mouseState_.buttons.left) {
+            app->camera_.rotate(x - app->mouseState_.position.x, y - app->mouseState_.position.y);
         }
 
         app->mouseState_.position = glm::vec2(x, y);
@@ -164,13 +222,13 @@ void Game::updateGui()
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Camera Control")) {
-        ImGui::Separator();
-        ImGui::Text("Controls:");
-        ImGui::Text("Mouse: Look around");
-        ImGui::Text("WASD: Move");
-        ImGui::Text("QE: Up/Down");
-        ImGui::Text("F2: Toggle camera mode");
+    if (ImGui::Begin("Camera Information")) {
+        ImGui::Text("Position: (%.2f, %.2f, %.2f)", camera_.pos().x, camera_.pos().y,
+                    camera_.pos().z);
+        ImGui::Text("Rotation: (%.2f°, %.2f°, %.2f°)", camera_.rot().x, camera_.rot().y,
+                    camera_.rot().z);
+        ImGui::Text("Direction: (%.2f, %.2f, %.2f)", camera_.dir().x, camera_.dir().y,
+                    camera_.dir().z);
     }
     ImGui::End();
 
@@ -257,8 +315,6 @@ void Game::drawFrame()
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         exitLog("failed to acquire swap chain image!");
     }
-
-    camera_.updateScene(sceneUniform_);
 
     renderer_->updateScene(frameIdx, sceneUniform_);
     renderer_->updateSkybox(frameIdx, skyboxUniform_);

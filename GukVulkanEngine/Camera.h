@@ -11,8 +11,22 @@ class Camera
   public:
     Camera();
 
-    void rotate(float yaw, float pitch);
+    void updateView();
+    void update(float deltaTime);
     void updateScene(SceneUniform& sceneUniform) const;
+
+    void rotate(float dx, float dy);
+
+    bool left{false};
+    bool right{false};
+    bool forward{false};
+    bool backward{false};
+    bool up{false};
+    bool down{false};
+
+    glm::vec3 pos();
+    glm::vec3 rot();
+    glm::vec3 dir();
 
   private:
     float fov{75.f};
@@ -22,10 +36,13 @@ class Camera
     float rotationSpeed{0.1f};
     float movementSpeed{10.f};
 
-    glm::vec3 position_{0.f, 0.f, 2.5f};
+    glm::vec3 position_{0.f, 0.f, 5.f};
     glm::vec3 rotation_{};
+    glm::vec3 forwardDir_{};
+    glm::vec3 rightDir_{};
+    glm::vec3 upDir_{0.0f, 1.0f, 0.0f};
 
-    glm::mat4 view_;
-    glm::mat4 projective_;
+    glm::mat4 view_{1.f};
+    glm::mat4 perspective_;
 };
 } // namespace guk
