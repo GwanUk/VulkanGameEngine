@@ -191,7 +191,7 @@ void Renderer::createTextures()
     dummyTexture_->createTexture("assets\\blender_uv_grid_2k.png", false);
     dummyTexture_->setSampler(device_->samplerLinearRepeat());
 
-    std::string path = "C:\\uk_dir\\resources\\ibl_ktx2\\german_town_street\\";
+    std::string path = "C:\\uk_dir\\resources\\ibl_ktx2\\radkow_lake\\";
 
     skyboxTextures_[0] = std::make_unique<Image2D>(device_);
     skyboxTextures_[0]->createTextureKtx2(path + "specular_out.ktx2", true);

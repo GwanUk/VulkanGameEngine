@@ -161,14 +161,14 @@ void Image2D::createTextureKtx2(const std::string& image, bool isSkybox)
         exitLog("Failed to load KTX2 texture: {}", image);
     }
 
+    width_ = texture2->baseWidth;
+    height_ = texture2->baseHeight;
+    mipLevels_ = texture2->numLevels;
+    arrayLayers_ = isSkybox ? 6 : 1;
     format_ = ktxTexture2_GetVkFormat(texture2);
     if (format_ == VK_FORMAT_UNDEFINED) {
         format_ = isSkybox ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R16G16_SFLOAT;
     }
-    width_ = texture2->baseWidth;
-    height_ = texture2->baseHeight;
-    mipLevels_ = texture2->numLayers;
-    arrayLayers_ = isSkybox ? 6 : 1;
 
     ktxTexture* texture = ktxTexture(texture2);
     ktx_uint8_t* textureData = ktxTexture_GetData(texture);
