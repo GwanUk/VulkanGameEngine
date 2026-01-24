@@ -25,6 +25,8 @@ class Mesh
     void setMaterialIndex(uint32_t index);
     uint32_t getMaterialIndex() const;
 
+    void calculateTangents();
+
   private:
     std::shared_ptr<Device> device_;
 

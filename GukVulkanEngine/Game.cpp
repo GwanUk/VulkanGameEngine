@@ -190,6 +190,7 @@ void Game::createModels()
     Model model{device_};
     model.load("C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\DamagedHelmet\\glTF-"
                "Binary\\DamagedHelmet.glb");
+    model.transform(glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(1.f, 0.f, 0.f)));
 
     models_.push_back(model);
 }
@@ -222,80 +223,66 @@ void Game::updateGui()
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Camera Information")) {
-        ImGui::Text("Position: (%.2f, %.2f, %.2f)", camera_.pos().x, camera_.pos().y,
-                    camera_.pos().z);
-        ImGui::Text("Rotation: (%.2f°, %.2f°, %.2f°)", camera_.rot().x, camera_.rot().y,
-                    camera_.rot().z);
-        ImGui::Text("Direction: (%.2f, %.2f, %.2f)", camera_.dir().x, camera_.dir().y,
-                    camera_.dir().z);
+    if (ImGui::Begin("Render Settings Controls")) {
+
+        // Camera Information
+        if (ImGui::CollapsingHeader("Camera Information", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Camera Position: (%.2f, %.2f, %.2f)", camera_.pos().x, camera_.pos().y,
+                        camera_.pos().z);
+            ImGui::Text("Camera Rotation: (%.2f°, %.2f°, %.2f°)", camera_.rot().x, camera_.rot().y,
+                        camera_.rot().z);
+            ImGui::Text("Camera Direction: (%.2f, %.2f, %.2f)", camera_.dir().x, camera_.dir().y,
+                        camera_.dir().z);
+        }
+
+        // Directional Light Controls
+        if (ImGui::CollapsingHeader("Directional Light Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Directional Light Dir: (%.2f, %.2f, %.2f)",
+                        sceneUniform_.directionalLightDir.x, sceneUniform_.directionalLightDir.y,
+                        sceneUniform_.directionalLightDir.z);
+
+            static float elevation = 55.f;
+            ImGui::SliderFloat("Light Elevation", &elevation, -90.0f, 90.0f, "%.1f°");
+            static float azimuth = 45.f;
+            ImGui::SliderFloat("Light Azimuth", &azimuth, -180.0f, 180.0f, "%.1f°");
+
+            sceneUniform_.directionalLightDir =
+                glm::vec3(cos(glm::radians(elevation)) * sin(glm::radians(azimuth)),
+                          sin(glm::radians(elevation)),
+                          cos(glm::radians(elevation)) * cos(glm::radians(azimuth)));
+
+            static std::array<int, 3> color{255, 255, 255};
+            ImGui::SliderInt3("Light Color", color.data(), 0, 255);
+            static float lightIntensity = 30;
+            ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 100.0f);
+
+            glm::vec3 lightColor = glm::vec3(color[0], color[1], color[2]) / 255.f;
+            sceneUniform_.directionalLightColor = lightColor * lightIntensity;
+        }
+
+        // HDR Environment Controls
+        if (ImGui::CollapsingHeader("HDR Environment Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::SliderFloat("Env Intensity", &skyboxUniform_.environmentIntensity, 0.0f, 10.0f,
+                               "%.2f");
+            ImGui::SliderFloat("Roughness Level", &skyboxUniform_.roughnessLevel, 0.0f, 10.0f,
+                               "%.1f");
+
+            bool useIrradiance = skyboxUniform_.useIrradianceMap != 0;
+            if (ImGui::Checkbox("Use Irradiance Map", &useIrradiance)) {
+                skyboxUniform_.useIrradianceMap = useIrradiance ? 1 : 0;
+            }
+        }
+
+        // Post Processing Controls
+        if (ImGui::CollapsingHeader("Post Processing Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::SliderFloat("Bloom Strength", &postUniform_.bloomStrength, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("Exposure", &postUniform_.exposure, 0.1f, 5.0f, "%.2f");
+            ImGui::SliderFloat("Gamma", &postUniform_.gamma, 1.0f / 2.2f, 2.2f, "%.2f");
+        }
     }
     ImGui::End();
-
-    renderHDRControlGui();
 
     ImGui::Render();
-}
-
-void Game::renderHDRControlGui()
-{
-    ImGui::SetNextWindowPos(ImVec2(320, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(350, 350), ImGuiCond_FirstUseEver);
-
-    if (!ImGui::Begin("HDR Controls")) {
-        ImGui::End();
-        return;
-    }
-
-    // HDR Environment Controls
-    if (ImGui::CollapsingHeader("HDR Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderFloat("Environment Intensity", &skyboxUniform_.environmentIntensity, 0.0f,
-                           10.0f, "%.2f");
-    }
-
-    // Environment Map Controls
-    if (ImGui::CollapsingHeader("Environment Map", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderFloat("Roughness Level", &skyboxUniform_.roughnessLevel, 0.0f, 8.0f, "%.1f");
-
-        bool useIrradiance = skyboxUniform_.useIrradianceMap != 0;
-        if (ImGui::Checkbox("Use Irradiance Map", &useIrradiance)) {
-            skyboxUniform_.useIrradianceMap = useIrradiance ? 1 : 0;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("?")) {
-            // Optional: Add click action here if needed
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Toggle between prefiltered environment map (sharp reflections) and "
-                              "irradiance map (diffuse lighting)");
-        }
-    }
-
-    // Tone Mapping Controls
-    if (ImGui::CollapsingHeader("Post Processing", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderFloat("Bloom Strength", &postUniform_.strength, 0.0f, 1.0f, "%.2f");
-    }
-
-    // Tone Mapping Controls
-    if (ImGui::CollapsingHeader("Tone Mapping", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderFloat("Exposure", &postUniform_.exposure, 0.1f, 5.0f, "%.2f");
-        ImGui::SliderFloat("Gamma", &postUniform_.gamma, 1.0f / 2.2f, 2.2f, "%.2f");
-    }
-
-    // Debug Visualization
-    if (ImGui::CollapsingHeader("Debug Visualization")) {
-        bool showMipLevels = skyboxUniform_.showMipLevels != 0;
-        if (ImGui::Checkbox("Show Mip Levels", &showMipLevels)) {
-            skyboxUniform_.showMipLevels = showMipLevels ? 1 : 0;
-        }
-
-        bool showCubeFaces = skyboxUniform_.showCubeFaces != 0;
-        if (ImGui::Checkbox("Show Cube Faces", &showCubeFaces)) {
-            skyboxUniform_.showCubeFaces = showCubeFaces ? 1 : 0;
-        }
-    }
-
-    ImGui::End();
 }
 
 void Game::drawFrame()

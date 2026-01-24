@@ -53,6 +53,7 @@ void Camera::updateScene(SceneUniform& sceneUniform) const
 {
     sceneUniform.view = view_;
     sceneUniform.proj = perspective_;
+    sceneUniform.cameraPos = position_;
 }
 
 void Camera::rotate(float dx, float dy)

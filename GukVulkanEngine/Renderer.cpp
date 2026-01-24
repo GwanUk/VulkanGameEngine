@@ -142,6 +142,8 @@ void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> m
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
 
     for (const Model& model : models) {
+        sceneUniformBuffers_[frameIdx]->update(model.matrix());
+
         for (const Mesh& mesh : model.meshes()) {
             VkBuffer vertexBuffer = mesh.getVertexBuffer();
             VkBuffer indexBuffer = mesh.getIndexBuffer();
@@ -212,7 +214,7 @@ void Renderer::createDescriptorSetLayout()
     uniformLayoutBindings[0].binding = 0;
     uniformLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uniformLayoutBindings[0].descriptorCount = 1;
-    uniformLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uniformLayoutBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     uniformLayoutBindings[1].binding = 1;
     uniformLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -428,7 +430,7 @@ void Renderer::createPipeline()
     rasterizationSCI.rasterizerDiscardEnable = VK_FALSE;
     rasterizationSCI.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationSCI.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizationSCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizationSCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizationSCI.depthBiasEnable = VK_FALSE;
     rasterizationSCI.lineWidth = 1.f;
 
@@ -551,8 +553,8 @@ void Renderer::createPipelineSkybox()
     rasterizationSCI.depthClampEnable = VK_FALSE;
     rasterizationSCI.rasterizerDiscardEnable = VK_FALSE;
     rasterizationSCI.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationSCI.cullMode = VK_CULL_MODE_NONE;
-    rasterizationSCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizationSCI.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizationSCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationSCI.depthBiasEnable = VK_FALSE;
     rasterizationSCI.lineWidth = 1.f;
 

@@ -34,10 +34,10 @@ class Camera
     float zfar{256.f};
 
     float rotationSpeed{0.1f};
-    float movementSpeed{10.f};
+    float movementSpeed{3.f};
 
-    glm::vec3 position_{0.f, 0.f, 5.f};
-    glm::vec3 rotation_{};
+    glm::vec3 position_{1.f, 0.f, 3.f};
+    glm::vec3 rotation_{0.f, 25.f, 0.f};
     glm::vec3 forwardDir_{};
     glm::vec3 rightDir_{};
     glm::vec3 upDir_{0.0f, 1.0f, 0.0f};

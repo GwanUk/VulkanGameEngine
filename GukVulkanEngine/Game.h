@@ -45,7 +45,6 @@ class Game
 
     void recreateSwapChain();
     void updateGui();
-    void renderHDRControlGui();
     void drawFrame();
 };
 

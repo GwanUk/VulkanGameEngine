@@ -11,6 +11,7 @@ struct Vertex
     glm::vec3 position;
     glm::vec3 normal;
     glm::vec2 texcoord;
+    glm::vec3 tangent;
 
     static VkVertexInputBindingDescription getBindingDescrption();
     static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
@@ -18,8 +19,13 @@ struct Vertex
 
 struct SceneUniform
 {
+    glm::mat4 model = glm::mat4(1.f);
     glm::mat4 view = glm::mat4(1.f);
     glm::mat4 proj = glm::mat4(1.f);
+    alignas(16) glm::vec3 cameraPos = glm::vec3(0.f);
+    alignas(16) glm::vec3 directionalLightDir = glm::vec3(0.f, 1.f, 0.f);
+    alignas(16) glm::vec3 directionalLightColor = glm::vec3(1.f);
+    glm::mat4 directionalLightMatrix = glm::mat4(1.f);
 };
 
 struct MaterialUniform
@@ -40,13 +46,11 @@ struct alignas(16) SkyboxUniform
     float environmentIntensity = 1.0f;
     float roughnessLevel = 0.5f;
     uint32_t useIrradianceMap = 0;
-    uint32_t showMipLevels = 0;
-    uint32_t showCubeFaces = 0;
 };
 
 struct alignas(16) PostUniform
 {
-    float strength = 0.12f;
+    float bloomStrength = 0.1f;
     float exposure = 1.0f;
     float gamma = 2.2f;
 };

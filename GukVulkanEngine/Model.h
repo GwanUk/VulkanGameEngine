@@ -18,9 +18,13 @@ class Model
     void load(const std::string& model);
     const std::vector<Mesh>& meshes() const;
 
+    glm::mat4 matrix() const;
+    void transform(const glm::mat4& matrix);
+
+    VkDescriptorSet getDescriptorSets(uint32_t index) const;
     void allocateDescriptorSets(VkDescriptorSetLayout layout,
                                 std::shared_ptr<Image2D> dummyTexture);
-    VkDescriptorSet getDescriptorSets(uint32_t index) const;
+
 
   private:
     std::shared_ptr<Device> device_;
@@ -35,17 +39,12 @@ class Model
     std::vector<bool> textureSrgb_;
 
     std::vector<VkDescriptorSet> descriptorSets_{};
+    glm::mat4 matrix_{1.0f};
 
-    void processNode(aiNode* node, const aiScene* scene, glm::mat4 matrix);
-    Mesh processMesh(aiMesh* mesh, const aiScene* scene, glm::mat4 matrix);
-
+    void processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix);
     void processMaterial(const aiScene* scene);
     uint32_t getTextureIndex(const std::string& textureFile, bool srgb);
-
-    void createBuffers();
     void createTextures(const aiScene* scene);
-
-
 };
 
 } // namespace guk

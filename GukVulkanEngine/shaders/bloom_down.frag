@@ -6,7 +6,7 @@ layout(push_constant) uniform BloomPushConstants
 {
     float width;
     float height;
-} pc;
+} bloom;
 
 layout(set = 1, binding = 0) uniform sampler2D bloomTexture;
 
@@ -16,8 +16,8 @@ void main()
 {
     float x = inUV.x;
     float y = inUV.y;
-    float dx = 1.0 / pc.width;
-    float dy = 1.0 / pc.height;
+    float dx = 1.0 / bloom.width;
+    float dy = 1.0 / bloom.height;
 
     // Take 13 samples around current texel:
     // a - b - c

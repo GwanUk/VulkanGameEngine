@@ -16,16 +16,29 @@ void Model::load(const std::string& model)
     Assimp::Importer aiImporter;
     const aiScene* scene = aiImporter.ReadFile(model, aiProcess_Triangulate);
 
-    processNode(scene->mRootNode, scene, glm::mat4{1.f});
+    processMesh(scene->mRootNode, scene, glm::mat4{1.f});
     processMaterial(scene);
-
-    createBuffers();
     createTextures(scene);
 }
 
 const std::vector<Mesh>& Model::meshes() const
 {
     return meshes_;
+}
+
+glm::mat4 Model::matrix() const
+{
+    return matrix_;
+}
+
+void Model::transform(const glm::mat4& matrix)
+{
+    matrix_ = matrix * matrix_;
+}
+
+VkDescriptorSet Model::getDescriptorSets(uint32_t index) const
+{
+    return descriptorSets_[index];
 }
 
 void Model::allocateDescriptorSets(VkDescriptorSetLayout layout,
@@ -143,74 +156,58 @@ void Model::allocateDescriptorSets(VkDescriptorSetLayout layout,
     }
 }
 
-VkDescriptorSet Model::getDescriptorSets(uint32_t index) const
+void Model::processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix)
 {
-    return descriptorSets_[index];
-}
-
-void Model::processNode(aiNode* node, const aiScene* scene, glm::mat4 matrix)
-{
-    glm::mat4 mat{matrix * glm::transpose(glm::make_mat4(&node->mTransformation.a1))};
+    matrix *= glm::transpose(glm::make_mat4(&node->mTransformation.a1));
 
     for (uint32_t i = 0; i < node->mNumMeshes; i++) {
         aiMesh* aiMesh = scene->mMeshes[node->mMeshes[i]];
-        Mesh mesh = processMesh(aiMesh, scene, mat);
+        Mesh mesh{device_};
 
-        // for (Vertex& vertex : mesh.vertices()) {
-        //     vertex.position = glm::vec3(glm::vec4(vertex.position, 1.f) * mat);
-        // }
+        for (uint32_t i = 0; i < aiMesh->mNumVertices; i++) {
+            Vertex vertex{};
+
+            vertex.position.x = aiMesh->mVertices[i].x;
+            vertex.position.y = aiMesh->mVertices[i].y;
+            vertex.position.z = aiMesh->mVertices[i].z;
+            vertex.position = glm::vec3(glm::vec4(vertex.position, 1.f) * matrix);
+
+            vertex.normal.x = aiMesh->mNormals[i].x;
+            vertex.normal.y = aiMesh->mNormals[i].z;
+            vertex.normal.z = -aiMesh->mNormals[i].y;
+
+            vertex.texcoord.x = (float)aiMesh->mTextureCoords[0][i].x;
+            vertex.texcoord.y = 1.0f - (float)aiMesh->mTextureCoords[0][i].y;
+
+            mesh.addVertex(vertex);
+        }
+
+        for (uint32_t i = 0; i < aiMesh->mNumFaces; i++) {
+            aiFace face = aiMesh->mFaces[i];
+            for (uint32_t j = 0; j < face.mNumIndices; j++) {
+
+                mesh.addIndex(face.mIndices[j]);
+            }
+        }
+
+        mesh.calculateTangents();
+        mesh.setMaterialIndex(aiMesh->mMaterialIndex);
+        mesh.createVertexBuffer();
+        mesh.createIndexBuffer();
 
         meshes_.push_back(mesh);
     }
 
     for (uint32_t i = 0; i < node->mNumChildren; i++) {
-        processNode(node->mChildren[i], scene, mat);
+        processMesh(node->mChildren[i], scene, matrix);
     }
-}
-
-Mesh Model::processMesh(aiMesh* aiMesh, const aiScene* scene, glm::mat4 matrix)
-{
-    Mesh mesh{device_};
-
-    for (uint32_t i = 0; i < aiMesh->mNumVertices; i++) {
-        Vertex vertex{};
-
-        vertex.position.x = aiMesh->mVertices[i].x;
-        vertex.position.y = aiMesh->mVertices[i].y;
-        vertex.position.z = aiMesh->mVertices[i].z;
-        vertex.position = glm::vec3(glm::vec4(vertex.position, 1.f) * matrix);
-
-        vertex.normal.x = aiMesh->mVertices[i].x;
-        vertex.normal.y = aiMesh->mVertices[i].y;
-        vertex.normal.z = aiMesh->mVertices[i].z;
-
-        if (aiMesh->mTextureCoords[0]) {
-            vertex.texcoord.x = (float)aiMesh->mTextureCoords[0][i].x;
-            vertex.texcoord.y = 1.0f - (float)aiMesh->mTextureCoords[0][i].y;
-        }
-
-        mesh.addVertex(vertex);
-    }
-
-    for (uint32_t i = 0; i < aiMesh->mNumFaces; i++) {
-        aiFace face = aiMesh->mFaces[i];
-        for (uint32_t j = 0; j < face.mNumIndices; j++) {
-            mesh.addIndex(face.mIndices[j]);
-        }
-    }
-
-    mesh.setMaterialIndex(aiMesh->mMaterialIndex);
-
-    return mesh;
 }
 
 void Model::processMaterial(const aiScene* scene)
 {
-    materials_.assign(scene->mNumMaterials, MaterialUniform{});
-
     for (uint32_t i = 0; i < scene->mNumMaterials; i++) {
         aiMaterial* aiMaterial = scene->mMaterials[i];
-        MaterialUniform& material = materials_[i];
+        MaterialUniform material{};
 
         aiColor3D color;
         if (aiMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS) {
@@ -253,6 +250,14 @@ void Model::processMaterial(const aiScene* scene)
         if (aiMaterial->GetTexture(aiTextureType_EMISSIVE, 0, &path) == AI_SUCCESS) {
             material.emissiveTextureIndex_ = getTextureIndex(path.C_Str(), true);
         }
+
+        materials_.push_back(material);
+
+        std::shared_ptr<Buffer> uniformBuffer = std::make_shared<Buffer>(device_);
+        uniformBuffer->createUniformBuffer(sizeof(MaterialUniform));
+        uniformBuffer->update(material);
+
+        materialUniformBuffers_.push_back(uniformBuffer);
     }
 }
 
@@ -266,21 +271,6 @@ uint32_t Model::getTextureIndex(const std::string& textureFile, bool srgb)
         textureFiles_.push_back(textureFile);
         textureSrgb_.push_back(srgb);
         return static_cast<uint32_t>(textureFiles_.size() - 1);
-    }
-}
-
-void Model::createBuffers()
-{
-    for (auto& mesh : meshes_) {
-        mesh.createVertexBuffer();
-        mesh.createIndexBuffer();
-    }
-
-    for (const auto& material : materials_) {
-        std::shared_ptr<Buffer> uniformBuffer = std::make_shared<Buffer>(device_);
-        uniformBuffer->createUniformBuffer(sizeof(MaterialUniform));
-        uniformBuffer->update(material);
-        materialUniformBuffers_.push_back(uniformBuffer);
     }
 }
 
