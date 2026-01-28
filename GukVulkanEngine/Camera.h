@@ -14,15 +14,10 @@ class Camera
     void updateView();
     void update(float deltaTime);
     void updateScene(SceneUniform& sceneUniform) const;
-
     void rotate(float dx, float dy);
 
-    bool left{false};
-    bool right{false};
-    bool forward{false};
-    bool backward{false};
-    bool up{false};
-    bool down{false};
+    bool firstPersonMode_{false};
+    KeyState keyState_{};
 
     glm::vec3 pos();
     glm::vec3 rot();
@@ -36,8 +31,8 @@ class Camera
     float rotationSpeed{0.1f};
     float movementSpeed{3.f};
 
-    glm::vec3 position_{1.f, 0.f, 3.f};
-    glm::vec3 rotation_{0.f, 25.f, 0.f};
+    glm::vec3 position_{0.f, 0.f, 3.f};
+    glm::vec3 rotation_{};
     glm::vec3 forwardDir_{};
     glm::vec3 rightDir_{};
     glm::vec3 upDir_{0.0f, 1.0f, 0.0f};

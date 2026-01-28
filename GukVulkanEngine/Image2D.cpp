@@ -292,19 +292,19 @@ void Image2D::createImage(VkImageUsageFlags usage, VkSampleCountFlagBits samples
 
     VkImageCreateInfo imageCI{};
     imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCI.flags = flags;
     imageCI.imageType = VK_IMAGE_TYPE_2D;
+    imageCI.format = format_;
     imageCI.extent.width = width_;
     imageCI.extent.height = height_;
     imageCI.extent.depth = 1;
     imageCI.mipLevels = mipLevels_;
     imageCI.arrayLayers = arrayLayers_;
-    imageCI.format = format_;
+    imageCI.samples = samples;
     imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageCI.usage = usage;
     imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageCI.samples = samples;
-    imageCI.flags = flags;
+    imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VK_CHECK(vkCreateImage(device_->get(), &imageCI, nullptr, &image_));
 

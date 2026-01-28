@@ -39,7 +39,7 @@ class Renderer
 
     std::array<VkDescriptorSetLayout, 3> descriptorSetLayouts_{};
     std::array<VkDescriptorSet, Device::MAX_FRAMES_IN_FLIGHT> uniformDescriptorSets_{};
-    VkDescriptorSet samplerDescriptorSet_{};
+    VkDescriptorSet skyboxDescriptorSet_{};
 
     VkPipelineLayout pipelineLayout_{};
     VkPipeline pipeline_{};

@@ -20,12 +20,17 @@ class Mesh
     VkBuffer getVertexBuffer() const;
     VkBuffer getIndexBuffer() const;
 
+    std::vector<Vertex>& vertices();
     uint32_t indicesSize() const;
 
     void setMaterialIndex(uint32_t index);
     uint32_t getMaterialIndex() const;
 
     void calculateTangents();
+    void calculateBound();
+    
+    glm::vec3 boundMin() const;
+    glm::vec3 boundMax() const;
 
   private:
     std::shared_ptr<Device> device_;
@@ -33,9 +38,11 @@ class Mesh
     std::vector<Vertex> vertices_{};
     std::vector<uint32_t> indices_{};
 
+    glm::vec3 boundMin_{};
+    glm::vec3 boundMax_{};
+
     std::shared_ptr<Buffer> vertexBuffer_;
     std::shared_ptr<Buffer> indexBuffer_;
-
     uint32_t materialIndex_{0};
 };
 

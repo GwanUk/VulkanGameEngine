@@ -46,6 +46,7 @@ class Game
     void recreateSwapChain();
     void updateGui();
     void drawFrame();
+    void update(float deltaTime);
 };
 
 } // namespace guk

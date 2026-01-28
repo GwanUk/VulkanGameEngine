@@ -19,7 +19,6 @@ struct Vertex
 
 struct SceneUniform
 {
-    glm::mat4 model = glm::mat4(1.f);
     glm::mat4 view = glm::mat4(1.f);
     glm::mat4 proj = glm::mat4(1.f);
     alignas(16) glm::vec3 cameraPos = glm::vec3(0.f);
@@ -55,6 +54,11 @@ struct alignas(16) PostUniform
     float gamma = 2.2f;
 };
 
+struct ModelPushConstants
+{
+    glm::mat4 model = glm::mat4(1.f);
+};
+
 struct BloomPushConstants
 {
     float width;
@@ -76,6 +80,16 @@ struct MouseState
         bool middle = false;
     } buttons;
     glm::vec2 position{0.0f, 0.0f};
+};
+
+struct KeyState
+{
+    bool left{false};
+    bool right{false};
+    bool forward{false};
+    bool backward{false};
+    bool up{false};
+    bool down{false};
 };
 
 } // namespace guk

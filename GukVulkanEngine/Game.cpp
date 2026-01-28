@@ -74,22 +74,25 @@ void Game::setCallBack()
         if (action == GLFW_PRESS) {
             switch (key) {
             case GLFW_KEY_W:
-                app->camera_.forward = true;
+                app->camera_.keyState_.forward = true;
                 break;
             case GLFW_KEY_S:
-                app->camera_.backward = true;
+                app->camera_.keyState_.backward = true;
                 break;
             case GLFW_KEY_A:
-                app->camera_.left = true;
+                app->camera_.keyState_.left = true;
                 break;
             case GLFW_KEY_D:
-                app->camera_.right = true;
+                app->camera_.keyState_.right = true;
                 break;
             case GLFW_KEY_E:
-                app->camera_.down = true;
+                app->camera_.keyState_.down = true;
                 break;
             case GLFW_KEY_Q:
-                app->camera_.up = true;
+                app->camera_.keyState_.up = true;
+                break;
+            case GLFW_KEY_F:
+                app->camera_.firstPersonMode_ = !app->camera_.firstPersonMode_;
                 break;
             case GLFW_KEY_ESCAPE:
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -98,22 +101,22 @@ void Game::setCallBack()
         } else if (action == GLFW_RELEASE) {
             switch (key) {
             case GLFW_KEY_W:
-                app->camera_.forward = false;
+                app->camera_.keyState_.forward = false;
                 break;
             case GLFW_KEY_S:
-                app->camera_.backward = false;
+                app->camera_.keyState_.backward = false;
                 break;
             case GLFW_KEY_A:
-                app->camera_.left = false;
+                app->camera_.keyState_.left = false;
                 break;
             case GLFW_KEY_D:
-                app->camera_.right = false;
+                app->camera_.keyState_.right = false;
                 break;
             case GLFW_KEY_E:
-                app->camera_.down = false;
+                app->camera_.keyState_.down = false;
                 break;
             case GLFW_KEY_Q:
-                app->camera_.up = false;
+                app->camera_.keyState_.up = false;
                 break;
             }
         }
@@ -187,12 +190,21 @@ void Game::createSyncObjects()
 
 void Game::createModels()
 {
-    Model model{device_};
-    model.load("C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\DamagedHelmet\\glTF-"
-               "Binary\\DamagedHelmet.glb");
-    model.transform(glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(1.f, 0.f, 0.f)));
+    models_.push_back(
+        Model::load(device_, "C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\DamagedHelmet\\glTF-"
+                             "Binary\\DamagedHelmet.glb")
+            .setRotation(glm::vec3(180.f, 0.f, 0.f)));
 
-    models_.push_back(model);
+    models_.push_back(
+        Model::load(device_,
+                    "C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\Cube\\glTF\\Cube.gltf")
+            .setTranslation(glm::vec3(0.f, 0.f, -2.f))
+            .setScale(glm::vec3(5.f, 3.f, 1.f)));
+
+    models_.push_back(Model::load(device_, "C:\\uk_dir\\resources\\glTF-Sample-Models\\2."
+                                           "0\\TwoSidedPlane\\glTF\\TwoSidedPlane.gltf")
+                          .setTranslation(glm::vec3(0.f, -2.f, 0.f))
+                          .setScale(glm::vec3(20.f)));
 }
 
 void Game::recreateSwapChain()
@@ -223,7 +235,7 @@ void Game::updateGui()
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Render Settings Controls")) {
+    if (ImGui::Begin("Render Settings")) {
 
         // Camera Information
         if (ImGui::CollapsingHeader("Camera Information", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -233,6 +245,8 @@ void Game::updateGui()
                         camera_.rot().z);
             ImGui::Text("Camera Direction: (%.2f, %.2f, %.2f)", camera_.dir().x, camera_.dir().y,
                         camera_.dir().z);
+
+            ImGui::Checkbox("First Person Mode", &camera_.firstPersonMode_);
         }
 
         // Directional Light Controls
@@ -253,7 +267,7 @@ void Game::updateGui()
 
             static std::array<int, 3> color{255, 255, 255};
             ImGui::SliderInt3("Light Color", color.data(), 0, 255);
-            static float lightIntensity = 30;
+            static float lightIntensity = 10;
             ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 100.0f);
 
             glm::vec3 lightColor = glm::vec3(color[0], color[1], color[2]) / 255.f;
@@ -278,6 +292,33 @@ void Game::updateGui()
             ImGui::SliderFloat("Bloom Strength", &postUniform_.bloomStrength, 0.0f, 1.0f, "%.2f");
             ImGui::SliderFloat("Exposure", &postUniform_.exposure, 0.1f, 5.0f, "%.2f");
             ImGui::SliderFloat("Gamma", &postUniform_.gamma, 1.0f / 2.2f, 2.2f, "%.2f");
+        }
+
+        // Models Controls
+        ImGui::Separator();
+        for (uint32_t i = 0; i < models_.size(); i++) {
+            auto& m = models_[i];
+
+            ImGui::Checkbox(std::format("{}##{}", m.name(), i).c_str(), &m.visible());
+
+            std::array<float, 3> pos{m.getTranslation().x, m.getTranslation().y,
+                                     m.getTranslation().z};
+            if (ImGui::SliderFloat3(std::format("Position##{}", i).c_str(), pos.data(), -50.0f,
+                                    50.0f)) {
+                m.setTranslation(glm::vec3(pos[0], pos[1], pos[2]));
+            }
+
+            std::array<float, 3> rot{m.getRotation().x, m.getRotation().y, m.getRotation().z};
+            if (ImGui::SliderFloat3(std::format("Rotation##{}", i).c_str(), rot.data(), -180.0f,
+                                    180.0f)) {
+                m.setRotation(glm::vec3(rot[0], rot[1], rot[2]));
+            }
+
+            std::array<float, 3> scale{m.getScale().x, m.getScale().y, m.getScale().z};
+            if (ImGui::SliderFloat3(std::format("Scale##{}", i).c_str(), scale.data(), 0.1f,
+                                    50.0f)) {
+                m.setScale(glm::vec3(scale[0], scale[1], scale[2]));
+            }
         }
     }
     ImGui::End();

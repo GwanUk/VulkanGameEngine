@@ -40,6 +40,11 @@ VkBuffer Mesh::getIndexBuffer() const
     return indexBuffer_->get();
 }
 
+std::vector<Vertex>& Mesh::vertices()
+{
+    return vertices_;
+}
+
 uint32_t Mesh::indicesSize() const
 {
     return static_cast<uint32_t>(indices_.size());
@@ -87,6 +92,27 @@ void Mesh::calculateTangents()
         glm::vec3 T = tangents[i];
         vertices_[i].tangent = glm::normalize(T - glm::dot(T, N) * N);
     }
+}
+
+void Mesh::calculateBound()
+{
+    boundMin_ = glm::vec3(FLT_MAX);
+    boundMax_ = glm::vec3(-FLT_MAX);
+
+    for (const auto& vertex : vertices_) {
+        boundMin_ = glm::min(boundMin_, vertex.position);
+        boundMax_ = glm::max(boundMax_, vertex.position);
+    }
+}
+
+glm::vec3 Mesh::boundMin() const
+{
+    return boundMin_;
+}
+
+glm::vec3 Mesh::boundMax() const
+{
+    return boundMax_;
 }
 
 } // namespace guk

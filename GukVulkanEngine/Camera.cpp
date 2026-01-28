@@ -10,13 +10,17 @@ Camera::Camera()
 
 void Camera::updateView()
 {
-    glm::mat4 rotMat(1.f);
-    rotMat = glm::rotate(rotMat, -glm::radians(rotation_.x), glm::vec3(1.f, 0.f, 0.f));
-    rotMat = glm::rotate(rotMat, -glm::radians(rotation_.y), glm::vec3(0.f, 1.f, 0.f));
+    glm::mat4 rot(1.f);
+    rot = glm::rotate(rot, -glm::radians(rotation_.x), glm::vec3(1.f, 0.f, 0.f));
+    rot = glm::rotate(rot, -glm::radians(rotation_.y), glm::vec3(0.f, 1.f, 0.f));
 
-    glm::mat4 transMat = glm::translate(glm::mat4(1.f), -position_);
+    glm::mat4 trans = glm::translate(glm::mat4(1.f), -position_);
 
-    view_ = rotMat * transMat;
+    if (firstPersonMode_) {
+        view_ = rot * trans;
+    } else {
+        view_ = trans * rot;
+    }
 }
 
 void Camera::update(float deltaTime)
@@ -27,22 +31,22 @@ void Camera::update(float deltaTime)
     forwardDir_ = glm::normalize(forwardDir_);
     rightDir_ = glm::normalize(glm::cross(forwardDir_, upDir_));
 
-    if (forward) {
+    if (keyState_.forward) {
         position_ += forwardDir_ * movementSpeed * deltaTime;
     }
-    if (backward) {
+    if (keyState_.backward) {
         position_ -= forwardDir_ * movementSpeed * deltaTime;
     }
-    if (right) {
+    if (keyState_.right) {
         position_ += rightDir_ * movementSpeed * deltaTime;
     }
-    if (left) {
+    if (keyState_.left) {
         position_ -= rightDir_ * movementSpeed * deltaTime;
     }
-    if (up) {
+    if (keyState_.up) {
         position_ += upDir_ * movementSpeed * deltaTime;
     }
-    if (down) {
+    if (keyState_.down) {
         position_ -= upDir_ * movementSpeed * deltaTime;
     }
 

@@ -5,8 +5,12 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexcoord;
 layout(location = 3) in vec3 inTangent;
 
+layout(push_constant) uniform ModelPushConstants
+{
+    mat4 model;
+} modelPc;
+
 layout(set = 0, binding = 0) uniform SceneUniform{
-	mat4 model;
 	mat4 view;
 	mat4 proj;
 	vec3 cameraPos;
@@ -21,12 +25,10 @@ layout(location = 2) out vec2 outTexcoord;
 layout(location = 3) out vec3 outTangent;
 
 void main() {
-	vec3 worldPosition = vec3(scene.model * vec4(inPosition, 1.0));
-	mat3 normalMatrix = transpose(inverse(mat3(scene.model)));
-
-	outPosition = worldPosition;
-	outNormal = normalize(normalMatrix * inNormal);
-	outTangent = normalize(normalMatrix * inTangent);
+	outPosition = vec3(modelPc.model * vec4(inPosition, 1.0));
+	outNormal = normalize(transpose(inverse(mat3(modelPc.model))) * inNormal);
+	outTangent = normalize(mat3(modelPc.model) * inTangent);
 	outTexcoord = inTexcoord;
-	gl_Position = scene.proj * scene.view * vec4(worldPosition, 1.0);
+
+	gl_Position = scene.proj * scene.view * vec4(outPosition, 1.0);
 }

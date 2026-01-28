@@ -6,7 +6,6 @@ layout(location = 2) in vec2 inTexcoord;
 layout(location = 3) in vec3 inTangent;
 
 layout(set = 0, binding = 0) uniform SceneUniform{
-	mat4 model;
 	mat4 view;
 	mat4 proj;
 	vec3 cameraPos;

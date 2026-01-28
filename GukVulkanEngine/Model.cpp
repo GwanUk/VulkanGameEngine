@@ -1,9 +1,12 @@
 #include "Model.h"
 #include "Logger.h"
 
+#include <filesystem>
 #include <assimp\Importer.hpp>
 #include <assimp\postprocess.h>
 #include <glm/gtc/type_ptr.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
 
 namespace guk {
 
@@ -11,14 +14,36 @@ Model::Model(std::shared_ptr<Device> device) : device_(device)
 {
 }
 
-void Model::load(const std::string& model)
+Model Model::load(std::shared_ptr<Device> device, const std::string& file)
 {
-    Assimp::Importer aiImporter;
-    const aiScene* scene = aiImporter.ReadFile(model, aiProcess_Triangulate);
+    Model model{device};
 
-    processMesh(scene->mRootNode, scene, glm::mat4{1.f});
-    processMaterial(scene);
-    createTextures(scene);
+    std::filesystem::path path(file);
+    model.directory_ = path.parent_path().string() + "\\";
+    model.name_ = path.stem().string();
+    model.extension_ = path.extension().string();
+
+    Assimp::Importer aiImporter;
+    const aiScene* scene = aiImporter.ReadFile(file, aiProcess_Triangulate);
+
+    model.processMesh(scene->mRootNode, scene, glm::mat4{1.f});
+    model.normalizeModel();
+    model.createMeshBuffers();
+
+    model.processMaterial(scene);
+    model.createTextures(scene);
+
+    return model;
+}
+
+std::string Model::name() const
+{
+    return name_;
+}
+
+bool& Model::visible()
+{
+    return visible_;
 }
 
 const std::vector<Mesh>& Model::meshes() const
@@ -26,25 +51,57 @@ const std::vector<Mesh>& Model::meshes() const
     return meshes_;
 }
 
-glm::mat4 Model::matrix() const
+glm::mat4 Model::matrix()
 {
-    return matrix_;
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), translation_);
+    glm::mat4 R = glm::toMat4(glm::quat(glm::radians(rotation_)));
+    glm::mat4 S = glm::scale(glm::mat4(1.0f), scale_);
+
+    return T * R * S;
 }
 
-void Model::transform(const glm::mat4& matrix)
+glm::vec3 Model::getTranslation() const
 {
-    matrix_ = matrix * matrix_;
+    return translation_;
 }
 
-VkDescriptorSet Model::getDescriptorSets(uint32_t index) const
+Model Model::setTranslation(glm::vec3 translation)
 {
-    return descriptorSets_[index];
+    translation_ = translation;
+    return *this;
 }
 
-void Model::allocateDescriptorSets(VkDescriptorSetLayout layout,
-                                   std::shared_ptr<Image2D> dummyTexture)
+glm::vec3 Model::getRotation() const
 {
-    descriptorSets_.resize(materials_.size());
+    return rotation_;
+}
+
+Model Model::setRotation(glm::vec3 rotation)
+{
+    rotation_ = rotation;
+    return *this;
+}
+
+glm::vec3 Model::getScale() const
+{
+    return scale_;
+}
+
+Model Model::setScale(glm::vec3 scale)
+{
+    scale_ = scale;
+    return *this;
+}
+
+VkDescriptorSet Model::getMaterialDescriptorSets(uint32_t index) const
+{
+    return materialDescriptorSets_[index];
+}
+
+void Model::allocateMaterialDescriptorSets(VkDescriptorSetLayout layout,
+                                           std::shared_ptr<Image2D> dummyTexture)
+{
+    materialDescriptorSets_.resize(materials_.size());
 
     std::vector<VkDescriptorSetLayout> layouts(materials_.size(), layout);
 
@@ -54,7 +111,7 @@ void Model::allocateDescriptorSets(VkDescriptorSetLayout layout,
     descSetAI.descriptorSetCount = static_cast<uint32_t>(layouts.size());
     descSetAI.pSetLayouts = layouts.data();
 
-    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, descriptorSets_.data()));
+    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, materialDescriptorSets_.data()));
 
     for (size_t i = 0; i < materials_.size(); i++) {
         const MaterialUniform& m = materials_[i];
@@ -110,42 +167,42 @@ void Model::allocateDescriptorSets(VkDescriptorSetLayout layout,
 
         std::array<VkWriteDescriptorSet, 6> write{};
         write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write[0].dstSet = descriptorSets_[i];
+        write[0].dstSet = materialDescriptorSets_[i];
         write[0].dstBinding = 0;
         write[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         write[0].descriptorCount = 1;
         write[0].pBufferInfo = &uniformInfo;
 
         write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write[1].dstSet = descriptorSets_[i];
+        write[1].dstSet = materialDescriptorSets_[i];
         write[1].dstBinding = 1;
         write[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write[1].descriptorCount = 1;
         write[1].pImageInfo = &baseColorInfo;
 
         write[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write[2].dstSet = descriptorSets_[i];
+        write[2].dstSet = materialDescriptorSets_[i];
         write[2].dstBinding = 2;
         write[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write[2].descriptorCount = 1;
         write[2].pImageInfo = &emissiveInfo;
 
         write[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write[3].dstSet = descriptorSets_[i];
+        write[3].dstSet = materialDescriptorSets_[i];
         write[3].dstBinding = 3;
         write[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write[3].descriptorCount = 1;
         write[3].pImageInfo = &normalInfo;
 
         write[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write[4].dstSet = descriptorSets_[i];
+        write[4].dstSet = materialDescriptorSets_[i];
         write[4].dstBinding = 4;
         write[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write[4].descriptorCount = 1;
         write[4].pImageInfo = &metallicRoughnessInfo;
 
         write[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write[5].dstSet = descriptorSets_[i];
+        write[5].dstSet = materialDescriptorSets_[i];
         write[5].dstBinding = 5;
         write[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write[5].descriptorCount = 1;
@@ -173,11 +230,18 @@ void Model::processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix)
             vertex.position = glm::vec3(glm::vec4(vertex.position, 1.f) * matrix);
 
             vertex.normal.x = aiMesh->mNormals[i].x;
-            vertex.normal.y = aiMesh->mNormals[i].z;
-            vertex.normal.z = -aiMesh->mNormals[i].y;
+            if (extension_ == ".glb") {
+                vertex.normal.y = aiMesh->mNormals[i].z;
+                vertex.normal.z = -aiMesh->mNormals[i].y;
+            } else {
+                vertex.normal.y = aiMesh->mNormals[i].y;
+                vertex.normal.z = aiMesh->mNormals[i].z;
+            }
 
-            vertex.texcoord.x = (float)aiMesh->mTextureCoords[0][i].x;
-            vertex.texcoord.y = 1.0f - (float)aiMesh->mTextureCoords[0][i].y;
+            if (aiMesh->mTextureCoords[0]) {
+                vertex.texcoord.x = (float)aiMesh->mTextureCoords[0][i].x;
+                vertex.texcoord.y = 1.0f - (float)aiMesh->mTextureCoords[0][i].y;
+            }
 
             mesh.addVertex(vertex);
         }
@@ -191,15 +255,45 @@ void Model::processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix)
         }
 
         mesh.calculateTangents();
+        mesh.calculateBound();
         mesh.setMaterialIndex(aiMesh->mMaterialIndex);
-        mesh.createVertexBuffer();
-        mesh.createIndexBuffer();
 
         meshes_.push_back(mesh);
     }
 
     for (uint32_t i = 0; i < node->mNumChildren; i++) {
         processMesh(node->mChildren[i], scene, matrix);
+    }
+}
+
+void Model::normalizeModel()
+{
+    boundingboxMin_ = glm::vec3(FLT_MAX);
+    boundingboxMax_ = glm::vec3(-FLT_MAX);
+
+    for (const auto& mesh : meshes_) {
+        boundingboxMin_ = glm::min(boundingboxMin_, mesh.boundMin());
+        boundingboxMax_ = glm::max(boundingboxMax_, mesh.boundMax());
+    }
+
+    glm::vec3 center = (boundingboxMax_ + boundingboxMin_) * 0.5f;
+    float delta = glm::compMax(boundingboxMax_ - boundingboxMin_);
+
+    for (auto& mesh : meshes_) {
+        for (auto& vertex : mesh.vertices()) {
+            vertex.position = (vertex.position - center) / delta;
+        }
+    }
+
+    boundingboxMin_ = (boundingboxMin_ - center) / delta;
+    boundingboxMax_ = (boundingboxMax_ - center) / delta;
+}
+
+void Model::createMeshBuffers()
+{
+    for (auto& mesh : meshes_) {
+        mesh.createVertexBuffer();
+        mesh.createIndexBuffer();
     }
 }
 
@@ -305,7 +399,7 @@ void Model::createTextures(const aiScene* scene)
                 delete[] data;
             }
         } else {
-            texture->createTexture(file, textureSrgb_[i]);
+            texture->createTexture(directory_ + file, textureSrgb_[i]);
         }
 
         texture->setSampler(device_->samplerLinearRepeat());
