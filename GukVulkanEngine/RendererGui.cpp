@@ -95,7 +95,7 @@ void RendererGui::draw(VkCommandBuffer cmd, uint32_t frameIdx,
     renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    VkRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO_KHR};
+    VkRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
     renderingInfo.renderArea = {0, 0, colorAttahcment->width(), colorAttahcment->height()};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;

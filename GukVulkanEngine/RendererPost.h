@@ -9,30 +9,31 @@ class RendererPost
 {
   public:
     RendererPost(std::shared_ptr<Device> device, VkFormat colorFormat, uint32_t width,
-                 uint32_t height, std::shared_ptr<Image2D> sceneTexture);
+                 uint32_t height, std::shared_ptr<Image2D> sceneTexture,
+                 std::shared_ptr<Image2D> shadowTexture);
     ~RendererPost();
 
     void resized(uint32_t width, uint32_t height);
-
-    void updatePostUniform(uint32_t frameIdx, PostUniform postUniform);
-
+    void update(uint32_t frameIdx, PostUniform postUniform);
     void draw(VkCommandBuffer cmd, uint32_t frameIdx, std::shared_ptr<Image2D> swapchainImg);
 
   private:
     std::shared_ptr<Device> device_;
     static constexpr uint32_t BLOOM_LEVELS{4};
 
-    std::array<std::unique_ptr<Buffer>, Device::MAX_FRAMES_IN_FLIGHT> postUniformBuffers_;
+    std::array<std::unique_ptr<Buffer>, Device::MAX_FRAMES_IN_FLIGHT> uniformBuffers_;
     std::unique_ptr<Image2D> bloomImage_;
     std::array<std::unique_ptr<Image2D>, BLOOM_LEVELS> bloomTextures_;
     std::shared_ptr<Image2D> sceneTexture_;
+    std::shared_ptr<Image2D> shadowTexture_;
 
     VkDescriptorSetLayout uniformSetLayout_{};
-    VkDescriptorSetLayout samplerSetLayout_{};
+    VkDescriptorSetLayout textureSetLayout_{};
 
     std::array<VkDescriptorSet, Device::MAX_FRAMES_IN_FLIGHT> uniformSets_{};
-    std::array<VkDescriptorSet, BLOOM_LEVELS> bloomSamplerSets_{};
-    VkDescriptorSet sceneSamplerSet_{};
+    std::array<VkDescriptorSet, BLOOM_LEVELS> bloomTextureSets_{};
+    VkDescriptorSet sceneTextureSet_{};
+    VkDescriptorSet shadowTextureSet_{};
 
     VkPipelineLayout pipelineLayout_{};
     VkPipeline pipeline_{};

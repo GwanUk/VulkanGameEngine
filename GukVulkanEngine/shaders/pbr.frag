@@ -4,6 +4,7 @@ layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexcoord;
 layout(location = 3) in vec3 inTangent;
+layout(location = 4) in vec4 inLightSpacePos;
 
 layout(set = 0, binding = 0) uniform SceneUniform{
 	mat4 view;
@@ -23,6 +24,7 @@ layout(set = 0, binding = 1) uniform SkyboxUniform {
 layout(set = 1, binding = 0) uniform samplerCube prefilteredMap;
 layout(set = 1, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 1, binding = 2) uniform sampler2D brdfLUT;
+layout(set = 1, binding = 3) uniform sampler2DShadow shadowMap;
 
 layout(set = 2, binding = 0) uniform MaterialUniform {
     vec4 emissiveFactor;
@@ -64,6 +66,31 @@ float geometrySchlickGGX(float roughness, float NdotL, float NdotV) {
     float g1v = NdotV / (NdotV * (1.0 - k) + k);
 
     return g1l * g1v;
+}
+
+float calculateShadow(vec4 lightSpacePos) {
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+
+    if(projCoords.z <= 0 || projCoords.z >= 1.0) {
+        return 1.0;
+    }
+
+    float shadow = 0.0;
+    float filterRadius = 2.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    const vec2 offsets[9] =
+    {
+        vec2(-1, -1), vec2(0, -1), vec2(1, -1),
+        vec2(-1, 0), vec2(0, 0), vec2(1, 0),
+        vec2(-1, +1), vec2(0, +1), vec2(1, +1)
+    };
+
+    for(int i = 0; i < 9; ++i) {    
+        vec2 offset = offsets[i] * texelSize * filterRadius;
+        shadow += texture(shadowMap, vec3(projCoords.xy + offset, projCoords.z));
+    }
+
+    return shadow / 9.0;
 }
 
 void main() {
@@ -126,6 +153,9 @@ void main() {
 
     vec3 l_radiance = scene.directionalLightColor;
     vec3 directionalLighting = (l_diffuseBRDF + l_specularBRDF) * l_radiance * NdotL;
+
+    // shadowing
+    directionalLighting *= calculateShadow(inLightSpacePos);
 
     vec4 color = vec4(ambientLighting + directionalLighting + emissive, 1.0);
     outColor = clamp(color, 0.0, 1000.0);

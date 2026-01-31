@@ -12,9 +12,9 @@ Game::Game()
       device_(std::make_shared<Device>(window_->getRequiredExts())),
       swapchain_(std::make_unique<Swapchain>(window_, device_)),
       renderer_(std::make_unique<Renderer>(device_, swapchain_->width(), swapchain_->height())),
-      rendererPost_(std::make_unique<RendererPost>(device_, swapchain_->format(),
-                                                   swapchain_->width(), swapchain_->height(),
-                                                   renderer_->colorAttachment())),
+      rendererPost_(std::make_unique<RendererPost>(
+          device_, swapchain_->format(), swapchain_->width(), swapchain_->height(),
+          renderer_->colorAttachment(), renderer_->shadowAttachment())),
       rendererGui_(std::make_unique<RendererGui>(device_, swapchain_->format()))
 {
     setCallBack();
@@ -47,13 +47,12 @@ void Game::run()
             std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime)
                 .count();
         lastTime = currentTime;
-
         deltaTime = glm::min(deltaTime, 0.033f); // Max 33ms (30 FPS minimum)
 
         updateGui();
-
         camera_.update(deltaTime);
-        camera_.updateScene(sceneUniform_);
+        camera_.writeScene(sceneUniform_);
+        calculateDirectionalLight();
 
         drawFrame();
     }
@@ -93,6 +92,9 @@ void Game::setCallBack()
                 break;
             case GLFW_KEY_F:
                 app->camera_.firstPersonMode_ = !app->camera_.firstPersonMode_;
+                break;
+            case GLFW_KEY_G:
+                app->postUniform_.shadowDepthView = ~app->postUniform_.shadowDepthView;
                 break;
             case GLFW_KEY_ESCAPE:
                 glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -198,13 +200,8 @@ void Game::createModels()
     models_.push_back(
         Model::load(device_,
                     "C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\Cube\\glTF\\Cube.gltf")
-            .setTranslation(glm::vec3(0.f, 0.f, -2.f))
-            .setScale(glm::vec3(5.f, 3.f, 1.f)));
-
-    models_.push_back(Model::load(device_, "C:\\uk_dir\\resources\\glTF-Sample-Models\\2."
-                                           "0\\TwoSidedPlane\\glTF\\TwoSidedPlane.gltf")
-                          .setTranslation(glm::vec3(0.f, -2.f, 0.f))
-                          .setScale(glm::vec3(20.f)));
+            .setTranslation(glm::vec3(0.f, -1.f, 0.f))
+            .setScale(glm::vec3(10.f, 0.1f, 10.f)));
 }
 
 void Game::recreateSwapChain()
@@ -268,7 +265,7 @@ void Game::updateGui()
             static std::array<int, 3> color{255, 255, 255};
             ImGui::SliderInt3("Light Color", color.data(), 0, 255);
             static float lightIntensity = 10;
-            ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 100.0f);
+            ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 100.0f, "%.2f");
 
             glm::vec3 lightColor = glm::vec3(color[0], color[1], color[2]) / 255.f;
             sceneUniform_.directionalLightColor = lightColor * lightIntensity;
@@ -292,6 +289,13 @@ void Game::updateGui()
             ImGui::SliderFloat("Bloom Strength", &postUniform_.bloomStrength, 0.0f, 1.0f, "%.2f");
             ImGui::SliderFloat("Exposure", &postUniform_.exposure, 0.1f, 5.0f, "%.2f");
             ImGui::SliderFloat("Gamma", &postUniform_.gamma, 1.0f / 2.2f, 2.2f, "%.2f");
+
+            bool shadowDepthView = postUniform_.shadowDepthView != 0;
+            if (ImGui::Checkbox("Shadow Depth View", &shadowDepthView)) {
+                postUniform_.shadowDepthView = shadowDepthView ? 1 : 0;
+            }
+
+            ImGui::SliderFloat("Depth Scale", &postUniform_.depthScale, 0.0f, 1.0f, "%.2f");
         }
 
         // Models Controls
@@ -304,19 +308,19 @@ void Game::updateGui()
             std::array<float, 3> pos{m.getTranslation().x, m.getTranslation().y,
                                      m.getTranslation().z};
             if (ImGui::SliderFloat3(std::format("Position##{}", i).c_str(), pos.data(), -50.0f,
-                                    50.0f)) {
+                                    50.0f, "%.2f")) {
                 m.setTranslation(glm::vec3(pos[0], pos[1], pos[2]));
             }
 
             std::array<float, 3> rot{m.getRotation().x, m.getRotation().y, m.getRotation().z};
             if (ImGui::SliderFloat3(std::format("Rotation##{}", i).c_str(), rot.data(), -180.0f,
-                                    180.0f)) {
+                                    180.0f, "%.2f")) {
                 m.setRotation(glm::vec3(rot[0], rot[1], rot[2]));
             }
 
             std::array<float, 3> scale{m.getScale().x, m.getScale().y, m.getScale().z};
-            if (ImGui::SliderFloat3(std::format("Scale##{}", i).c_str(), scale.data(), 0.1f,
-                                    50.0f)) {
+            if (ImGui::SliderFloat3(std::format("Scale##{}", i).c_str(), scale.data(), 0.1f, 50.0f,
+                                    "%.2f")) {
                 m.setScale(glm::vec3(scale[0], scale[1], scale[2]));
             }
         }
@@ -344,9 +348,8 @@ void Game::drawFrame()
         exitLog("failed to acquire swap chain image!");
     }
 
-    renderer_->updateScene(frameIdx, sceneUniform_);
-    renderer_->updateSkybox(frameIdx, skyboxUniform_);
-    rendererPost_->updatePostUniform(frameIdx, postUniform_);
+    renderer_->update(frameIdx, sceneUniform_, skyboxUniform_);
+    rendererPost_->update(frameIdx, postUniform_);
     rendererGui_->update(frameIdx);
 
     VK_CHECK(vkResetFences(device_->get(), 1, &fences_[frameIdx]));
@@ -364,6 +367,7 @@ void Game::drawFrame()
                                             VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
+    renderer_->drawShadow(cmd, frameIdx, models_);
     renderer_->draw(cmd, frameIdx, models_);
     rendererPost_->draw(cmd, frameIdx, swapchain_->image(imageIdx));
     rendererGui_->draw(cmd, frameIdx, swapchain_->image(imageIdx));
@@ -423,6 +427,50 @@ void Game::drawFrame()
 
     frameIdx = (frameIdx + 1) % Device::MAX_FRAMES_IN_FLIGHT;
     semaphoreIdx = (semaphoreIdx + 1) % swapchain_->size();
+}
+
+void Game::calculateDirectionalLight()
+{
+    glm::vec3 forward = -sceneUniform_.directionalLightDir;
+    glm::vec3 up = glm::vec3(0.f, 0.f, 1.f);
+    if (glm::abs(glm::dot(forward, up)) > 0.99f) {
+        up = glm::vec3(0.f, 1.f, 0.f);
+    }
+    glm::mat4 lightView = glm::lookAt(glm::vec3(0.f), forward, up);
+
+    glm::vec3 wMin(std::numeric_limits<float>::max());
+    glm::vec3 wMax(std::numeric_limits<float>::lowest());
+    for (const auto& model : models_) {
+        for (const auto& corner : boxCorners(model.boundMin(), model.boundMax())) {
+            glm::vec3 wCorner = glm::vec3(model.matrix() * glm::vec4(corner, 1.f));
+            wMin = glm::min(wMin, wCorner);
+            wMax = glm::max(wMax, wCorner);
+        }
+    }
+
+    glm::vec3 vMin(std::numeric_limits<float>::max());
+    glm::vec3 vMax(std::numeric_limits<float>::lowest());
+    for (const auto& coner : boxCorners(wMin, wMax)) {
+        glm::vec3 vConer = glm::vec3(lightView * glm::vec4(coner, 1.f));
+        vMin = glm::min(vMin, vConer);
+        vMax = glm::max(vMax, vConer);
+    }
+
+    glm::mat4 lightProj = glm::orthoRH_ZO(vMin.x, vMax.x, vMin.y, vMax.y, -vMax.z, -vMin.z);
+    lightProj[1][1] *= -1;
+
+    sceneUniform_.directionalLightMatrix = lightProj * lightView;
+    postUniform_.inverseProj = glm::inverse(lightProj);
+}
+
+std::array<glm::vec3, 8> Game::boxCorners(const glm::vec3& min, const glm::vec3& max)
+{
+    return std::array<glm::vec3, 8>{
+        glm::vec3(min.x, min.y, min.z), glm::vec3(max.x, min.y, min.z),
+        glm::vec3(min.x, max.y, min.z), glm::vec3(max.x, max.y, min.z),
+        glm::vec3(min.x, min.y, max.z), glm::vec3(max.x, min.y, max.z),
+        glm::vec3(min.x, max.y, max.z), glm::vec3(max.x, max.y, max.z),
+    };
 }
 
 } // namespace guk

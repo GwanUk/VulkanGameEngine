@@ -69,5 +69,11 @@
     <None Include="shaders\pbr.vert">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\shadow.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\shadow.vert">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

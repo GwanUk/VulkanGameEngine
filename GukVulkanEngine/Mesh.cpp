@@ -96,8 +96,8 @@ void Mesh::calculateTangents()
 
 void Mesh::calculateBound()
 {
-    boundMin_ = glm::vec3(FLT_MAX);
-    boundMax_ = glm::vec3(-FLT_MAX);
+    boundMin_ = glm::vec3(std::numeric_limits<float>::max());
+    boundMax_ = glm::vec3(std::numeric_limits<float>::lowest());
 
     for (const auto& vertex : vertices_) {
         boundMin_ = glm::min(boundMin_, vertex.position);

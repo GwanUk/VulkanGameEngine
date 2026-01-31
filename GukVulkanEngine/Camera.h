@@ -16,7 +16,7 @@ class Camera
     void updateScene(SceneUniform& sceneUniform) const;
     void rotate(float dx, float dy);
 
-    bool firstPersonMode_{false};
+    bool firstPersonMode_{true};
     KeyState keyState_{};
 
     glm::vec3 pos();

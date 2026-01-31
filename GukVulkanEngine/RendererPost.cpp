@@ -4,9 +4,11 @@
 namespace guk {
 
 RendererPost::RendererPost(std::shared_ptr<Device> device, VkFormat colorFormat, uint32_t width,
-                           uint32_t height, std::shared_ptr<Image2D> sceneTexture)
-    : device_(device), sceneTexture_(sceneTexture), bloomImage_(std::make_unique<Image2D>(device_)),
-      postUniformBuffers_(std::make_unique<Buffer>(device_))
+                           uint32_t height, std::shared_ptr<Image2D> sceneTexture,
+                           std::shared_ptr<Image2D> shadowTexture)
+    : device_(device), sceneTexture_(sceneTexture), shadowTexture_(shadowTexture),
+      bloomImage_(std::make_unique<Image2D>(device_)),
+      uniformBuffers_(std::make_unique<Buffer>(device_))
 {
     createBloomImage(width, height);
     createUniform();
@@ -29,7 +31,7 @@ RendererPost::~RendererPost()
 
     vkDestroyPipelineLayout(device_->get(), pipelineLayout_, nullptr);
 
-    vkDestroyDescriptorSetLayout(device_->get(), samplerSetLayout_, nullptr);
+    vkDestroyDescriptorSetLayout(device_->get(), textureSetLayout_, nullptr);
     vkDestroyDescriptorSetLayout(device_->get(), uniformSetLayout_, nullptr);
 }
 
@@ -39,9 +41,9 @@ void RendererPost::resized(uint32_t width, uint32_t height)
     updateSampelrDescriptorSet();
 }
 
-void RendererPost::updatePostUniform(uint32_t frameIdx, PostUniform postUniform)
+void RendererPost::update(uint32_t frameIdx, PostUniform postUniform)
 {
-    postUniformBuffers_[frameIdx]->update(postUniform);
+    uniformBuffers_[frameIdx]->update(postUniform);
 }
 
 void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
@@ -91,8 +93,8 @@ void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
     scissor.extent = {swapchainImg->width(), swapchainImg->height()};
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    std::array<VkDescriptorSet, 3> sets{uniformSets_[frameIdx], bloomSamplerSets_[0],
-                                        sceneSamplerSet_};
+    std::array<VkDescriptorSet, 4> sets{uniformSets_[frameIdx], bloomTextureSets_[0],
+                                        sceneTextureSet_, shadowTextureSet_};
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0,
                             static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
 
@@ -145,7 +147,7 @@ void RendererPost::bloomDown(VkCommandBuffer cmd)
         scissor.extent = {bloomTextures_[i]->width(), bloomTextures_[i]->height()};
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        VkDescriptorSet set = i == 1 ? sceneSamplerSet_ : bloomSamplerSets_[i - 1];
+        VkDescriptorSet set = i == 1 ? sceneTextureSet_ : bloomTextureSets_[i - 1];
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 1, 1, &set,
                                 0, nullptr);
 
@@ -208,7 +210,7 @@ void RendererPost::bloomUp(VkCommandBuffer cmd)
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 1, 1,
-                                &bloomSamplerSets_[l + 1], 0, nullptr);
+                                &bloomTextureSets_[l + 1], 0, nullptr);
 
         BloomPushConstants pc{};
         pc.width = static_cast<float>(bloomTextures_[l]->width());
@@ -239,8 +241,8 @@ void RendererPost::createBloomImage(uint32_t width, uint32_t height)
 void RendererPost::createUniform()
 {
     for (uint32_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
-        postUniformBuffers_[i] = std::make_unique<Buffer>(device_);
-        postUniformBuffers_[i]->createUniformBuffer(sizeof(PostUniform));
+        uniformBuffers_[i] = std::make_unique<Buffer>(device_);
+        uniformBuffers_[i]->createUniformBuffer(sizeof(PostUniform));
     }
 }
 
@@ -260,17 +262,17 @@ void RendererPost::createDescriptorSetLayout()
     VK_CHECK(
         vkCreateDescriptorSetLayout(device_->get(), &descSetLayoutCI, nullptr, &uniformSetLayout_));
 
-    VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-    samplerLayoutBinding.binding = 0;
-    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    samplerLayoutBinding.descriptorCount = 1;
-    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutBinding textureLayoutBinding{};
+    textureLayoutBinding.binding = 0;
+    textureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    textureLayoutBinding.descriptorCount = 1;
+    textureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     descSetLayoutCI.bindingCount = 1;
-    descSetLayoutCI.pBindings = &samplerLayoutBinding;
+    descSetLayoutCI.pBindings = &textureLayoutBinding;
 
     VK_CHECK(
-        vkCreateDescriptorSetLayout(device_->get(), &descSetLayoutCI, nullptr, &samplerSetLayout_));
+        vkCreateDescriptorSetLayout(device_->get(), &descSetLayoutCI, nullptr, &textureSetLayout_));
 }
 
 void RendererPost::allocateDescriptorSets()
@@ -287,7 +289,7 @@ void RendererPost::allocateDescriptorSets()
 
     for (size_t i = 0; i < Device::MAX_FRAMES_IN_FLIGHT; i++) {
         VkDescriptorBufferInfo sceneUniformInfo{};
-        sceneUniformInfo.buffer = postUniformBuffers_[i]->get();
+        sceneUniformInfo.buffer = uniformBuffers_[i]->get();
         sceneUniformInfo.range = sizeof(PostUniform);
 
         VkWriteDescriptorSet writeUniform{};
@@ -301,58 +303,73 @@ void RendererPost::allocateDescriptorSets()
         vkUpdateDescriptorSets(device_->get(), 1, &writeUniform, 0, nullptr);
     }
 
-    std::vector<VkDescriptorSetLayout> bloomSamplerLayouts(BLOOM_LEVELS, samplerSetLayout_);
-    descSetAI.descriptorSetCount = static_cast<uint32_t>(bloomSamplerLayouts.size());
-    descSetAI.pSetLayouts = bloomSamplerLayouts.data();
-
-    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, bloomSamplerSets_.data()));
-
     descSetAI.descriptorSetCount = 1;
-    descSetAI.pSetLayouts = &samplerSetLayout_;
+    descSetAI.pSetLayouts = &textureSetLayout_;
+    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, &shadowTextureSet_));
 
-    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, &sceneSamplerSet_));
+    // shadow sampler texture
+    VkDescriptorImageInfo shadowTextureInfo{};
+    shadowTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    shadowTextureInfo.imageView = shadowTexture_->view();
+    shadowTextureInfo.sampler = shadowTexture_->sampler();
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = shadowTextureSet_;
+    write.dstBinding = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = 1;
+    write.pImageInfo = &shadowTextureInfo;
+    vkUpdateDescriptorSets(device_->get(), 1, &write, 0, nullptr);
+
+    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, &sceneTextureSet_));
+
+    std::vector<VkDescriptorSetLayout> bloomTextureLayouts(BLOOM_LEVELS, textureSetLayout_);
+    descSetAI.descriptorSetCount = static_cast<uint32_t>(bloomTextureLayouts.size());
+    descSetAI.pSetLayouts = bloomTextureLayouts.data();
+    VK_CHECK(vkAllocateDescriptorSets(device_->get(), &descSetAI, bloomTextureSets_.data()));
 }
 
 void RendererPost::updateSampelrDescriptorSet()
 {
-    // bloom sampler texture
-    for (size_t i = 0; i < BLOOM_LEVELS; i++) {
-        VkDescriptorImageInfo bloomSamplerInfo{};
-        bloomSamplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        bloomSamplerInfo.imageView = bloomTextures_[i]->view();
-        bloomSamplerInfo.sampler = bloomTextures_[i]->sampler();
-
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = bloomSamplerSets_[i];
-        write.dstBinding = 0;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.descriptorCount = 1;
-        write.pImageInfo = &bloomSamplerInfo;
-
-        vkUpdateDescriptorSets(device_->get(), 1, &write, 0, nullptr);
-    }
-
     // scene sampler texture
-    VkDescriptorImageInfo sceneSamplerInfo{};
-    sceneSamplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    sceneSamplerInfo.imageView = sceneTexture_->view();
-    sceneSamplerInfo.sampler = sceneTexture_->sampler();
+    VkDescriptorImageInfo sceneTextureInfo{};
+    sceneTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    sceneTextureInfo.imageView = sceneTexture_->view();
+    sceneTextureInfo.sampler = sceneTexture_->sampler();
 
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = sceneSamplerSet_;
+    write.dstSet = sceneTextureSet_;
     write.dstBinding = 0;
     write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     write.descriptorCount = 1;
-    write.pImageInfo = &sceneSamplerInfo;
+    write.pImageInfo = &sceneTextureInfo;
     vkUpdateDescriptorSets(device_->get(), 1, &write, 0, nullptr);
+
+    // bloom sampler texture
+    for (size_t i = 0; i < BLOOM_LEVELS; i++) {
+        VkDescriptorImageInfo bloomTextureInfo{};
+        bloomTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        bloomTextureInfo.imageView = bloomTextures_[i]->view();
+        bloomTextureInfo.sampler = bloomTextures_[i]->sampler();
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = bloomTextureSets_[i];
+        write.dstBinding = 0;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorCount = 1;
+        write.pImageInfo = &bloomTextureInfo;
+
+        vkUpdateDescriptorSets(device_->get(), 1, &write, 0, nullptr);
+    }
 }
 
 void RendererPost::createPipelineLayout()
 {
-    std::array<VkDescriptorSetLayout, 3> descriptorSetLayouts{uniformSetLayout_, samplerSetLayout_,
-                                                              samplerSetLayout_};
+    std::array<VkDescriptorSetLayout, 4> descriptorSetLayouts{uniformSetLayout_, textureSetLayout_,
+                                                              textureSetLayout_, textureSetLayout_};
 
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;

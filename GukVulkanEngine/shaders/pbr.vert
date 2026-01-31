@@ -23,12 +23,21 @@ layout(location = 0) out vec3 outPosition;
 layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec2 outTexcoord;
 layout(location = 3) out vec3 outTangent;
+layout(location = 4) out vec4 outLightSpacePos;
 
 void main() {
 	outPosition = vec3(modelPc.model * vec4(inPosition, 1.0));
 	outNormal = normalize(transpose(inverse(mat3(modelPc.model))) * inNormal);
 	outTangent = normalize(mat3(modelPc.model) * inTangent);
 	outTexcoord = inTexcoord;
+
+	const mat4 scaleBias = mat4(
+        0.5, 0.0, 0.0, 0.0, 
+        0.0, 0.5, 0.0, 0.0, 
+        0.0, 0.0, 1.0, 0.0, 
+        0.5, 0.5, 0.0, 1.0
+	);
+	outLightSpacePos = scaleBias * scene.directionalLightMatrix * vec4(outPosition, 1.0);
 
 	gl_Position = scene.proj * scene.view * vec4(outPosition, 1.0);
 }

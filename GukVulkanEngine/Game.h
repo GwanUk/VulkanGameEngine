@@ -47,6 +47,8 @@ class Game
     void updateGui();
     void drawFrame();
     void update(float deltaTime);
+    void calculateDirectionalLight();
+    std::array<glm::vec3, 8> boxCorners(const glm::vec3& min, const glm::vec3& max);
 };
 
 } // namespace guk

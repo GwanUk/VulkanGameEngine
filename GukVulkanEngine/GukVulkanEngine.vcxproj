@@ -175,6 +175,8 @@
     <None Include="shaders\pbr.vert" />
     <None Include="shaders\post_process.frag" />
     <None Include="shaders\post_process.vert" />
+    <None Include="shaders\shadow.frag" />
+    <None Include="shaders\shadow.vert" />
     <None Include="shaders\skybox.frag" />
     <None Include="shaders\skybox.vert" />
   </ItemGroup>

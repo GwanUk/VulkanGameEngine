@@ -20,7 +20,7 @@ class Model
     std::string name() const;
     bool& visible();
     const std::vector<Mesh>& meshes() const;
-    glm::mat4 matrix();
+    glm::mat4 matrix() const;
 
     glm::vec3 getTranslation() const;
     Model setTranslation(glm::vec3 translation);
@@ -32,6 +32,9 @@ class Model
     VkDescriptorSet getMaterialDescriptorSets(uint32_t index) const;
     void allocateMaterialDescriptorSets(VkDescriptorSetLayout layout,
                                         std::shared_ptr<Image2D> dummyTexture);
+
+    glm::vec3 boundMin() const;
+    glm::vec3 boundMax() const;
 
   private:
     std::shared_ptr<Device> device_;
@@ -54,8 +57,8 @@ class Model
     std::vector<std::string> textureFiles_;
     std::vector<bool> textureSrgb_;
 
-    glm::vec3 boundingboxMin_{};
-    glm::vec3 boundingboxMax_{};
+    glm::vec3 boundMin_{};
+    glm::vec3 boundMax_{};
 
     void processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix);
     void normalizeModel();

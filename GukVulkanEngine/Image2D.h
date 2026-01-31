@@ -37,6 +37,7 @@ class Image2D
 
     void transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 stage, VkAccessFlagBits2 access,
                     VkImageLayout layout);
+    static void transitions(VkCommandBuffer cmd, std::vector<VkImageMemoryBarrier2> barriers);
     VkImageMemoryBarrier2 barrier2(VkPipelineStageFlagBits2 stage, VkAccessFlagBits2 access,
                                    VkImageLayout layout);
 

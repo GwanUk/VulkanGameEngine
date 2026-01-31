@@ -51,7 +51,7 @@ const std::vector<Mesh>& Model::meshes() const
     return meshes_;
 }
 
-glm::mat4 Model::matrix()
+glm::mat4 Model::matrix() const
 {
     glm::mat4 T = glm::translate(glm::mat4(1.0f), translation_);
     glm::mat4 R = glm::toMat4(glm::quat(glm::radians(rotation_)));
@@ -122,48 +122,48 @@ void Model::allocateMaterialDescriptorSets(VkDescriptorSetLayout layout,
 
         VkDescriptorImageInfo baseColorInfo{};
         baseColorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        baseColorInfo.imageView = m.baseColorTextureIndex_ < 0
+        baseColorInfo.imageView = m.baseColorTextureIndex < 0
                                       ? dummyTexture->view()
-                                      : textures_[m.baseColorTextureIndex_]->view();
-        baseColorInfo.sampler = m.baseColorTextureIndex_ < 0
+                                      : textures_[m.baseColorTextureIndex]->view();
+        baseColorInfo.sampler = m.baseColorTextureIndex < 0
                                     ? dummyTexture->sampler()
-                                    : textures_[m.baseColorTextureIndex_]->sampler();
+                                    : textures_[m.baseColorTextureIndex]->sampler();
 
         VkDescriptorImageInfo emissiveInfo{};
         emissiveInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        emissiveInfo.imageView = m.emissiveTextureIndex_ < 0
+        emissiveInfo.imageView = m.emissiveTextureIndex < 0
                                      ? dummyTexture->view()
-                                     : textures_[m.emissiveTextureIndex_]->view();
-        emissiveInfo.sampler = m.emissiveTextureIndex_ < 0
+                                     : textures_[m.emissiveTextureIndex]->view();
+        emissiveInfo.sampler = m.emissiveTextureIndex < 0
                                    ? dummyTexture->sampler()
-                                   : textures_[m.emissiveTextureIndex_]->sampler();
+                                   : textures_[m.emissiveTextureIndex]->sampler();
 
         VkDescriptorImageInfo normalInfo{};
         normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        normalInfo.imageView = m.normalTextureIndex_ < 0 ? dummyTexture->view()
-                                                         : textures_[m.normalTextureIndex_]->view();
-        normalInfo.sampler = m.normalTextureIndex_ < 0
+        normalInfo.imageView = m.normalTextureIndex < 0 ? dummyTexture->view()
+                                                         : textures_[m.normalTextureIndex]->view();
+        normalInfo.sampler = m.normalTextureIndex < 0
                                  ? dummyTexture->sampler()
-                                 : textures_[m.normalTextureIndex_]->sampler();
+                                 : textures_[m.normalTextureIndex]->sampler();
 
         VkDescriptorImageInfo metallicRoughnessInfo{};
         metallicRoughnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        metallicRoughnessInfo.imageView = m.metallicRoughnessTextureIndex_ < 0
+        metallicRoughnessInfo.imageView = m.metallicRoughnessTextureIndex < 0
                                               ? dummyTexture->view()
-                                              : textures_[m.metallicRoughnessTextureIndex_]->view();
+                                              : textures_[m.metallicRoughnessTextureIndex]->view();
         metallicRoughnessInfo.sampler =
-            m.metallicRoughnessTextureIndex_ < 0
+            m.metallicRoughnessTextureIndex < 0
                 ? dummyTexture->sampler()
-                : textures_[m.metallicRoughnessTextureIndex_]->sampler();
+                : textures_[m.metallicRoughnessTextureIndex]->sampler();
 
         VkDescriptorImageInfo occlusionInfo{};
         occlusionInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        occlusionInfo.imageView = m.occlusionTextureIndex_ < 0
+        occlusionInfo.imageView = m.occlusionTextureIndex < 0
                                       ? dummyTexture->view()
-                                      : textures_[m.occlusionTextureIndex_]->view();
-        occlusionInfo.sampler = m.occlusionTextureIndex_ < 0
+                                      : textures_[m.occlusionTextureIndex]->view();
+        occlusionInfo.sampler = m.occlusionTextureIndex < 0
                                     ? dummyTexture->sampler()
-                                    : textures_[m.occlusionTextureIndex_]->sampler();
+                                    : textures_[m.occlusionTextureIndex]->sampler();
 
         std::array<VkWriteDescriptorSet, 6> write{};
         write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -211,6 +211,16 @@ void Model::allocateMaterialDescriptorSets(VkDescriptorSetLayout layout,
         vkUpdateDescriptorSets(device_->get(), static_cast<uint32_t>(write.size()), write.data(), 0,
                                nullptr);
     }
+}
+
+glm::vec3 Model::boundMin() const
+{
+    return boundMin_;
+}
+
+glm::vec3 Model::boundMax() const
+{
+    return boundMax_;
 }
 
 void Model::processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix)
@@ -268,16 +278,16 @@ void Model::processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix)
 
 void Model::normalizeModel()
 {
-    boundingboxMin_ = glm::vec3(FLT_MAX);
-    boundingboxMax_ = glm::vec3(-FLT_MAX);
+    boundMin_ = glm::vec3(std::numeric_limits<float>::max());
+    boundMax_ = glm::vec3(std::numeric_limits<float>::lowest());
 
     for (const auto& mesh : meshes_) {
-        boundingboxMin_ = glm::min(boundingboxMin_, mesh.boundMin());
-        boundingboxMax_ = glm::max(boundingboxMax_, mesh.boundMax());
+        boundMin_ = glm::min(boundMin_, mesh.boundMin());
+        boundMax_ = glm::max(boundMax_, mesh.boundMax());
     }
 
-    glm::vec3 center = (boundingboxMax_ + boundingboxMin_) * 0.5f;
-    float delta = glm::compMax(boundingboxMax_ - boundingboxMin_);
+    glm::vec3 center = (boundMax_ + boundMin_) * 0.5f;
+    float delta = glm::compMax(boundMax_ - boundMin_);
 
     for (auto& mesh : meshes_) {
         for (auto& vertex : mesh.vertices()) {
@@ -285,8 +295,8 @@ void Model::normalizeModel()
         }
     }
 
-    boundingboxMin_ = (boundingboxMin_ - center) / delta;
-    boundingboxMax_ = (boundingboxMax_ - center) / delta;
+    boundMin_ = (boundMin_ - center) / delta;
+    boundMax_ = (boundMax_ - center) / delta;
 }
 
 void Model::createMeshBuffers()
@@ -305,44 +315,44 @@ void Model::processMaterial(const aiScene* scene)
 
         aiColor3D color;
         if (aiMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS) {
-            material.baseColorFactor_ = glm::vec4(color.r, color.g, color.b, 1.f);
+            material.baseColorFactor = glm::vec4(color.r, color.g, color.b, 1.f);
         }
 
         float metailic;
         if (aiMaterial->Get(AI_MATKEY_METALLIC_FACTOR, metailic) == AI_SUCCESS) {
-            material.metallicFactor_ = metailic;
+            material.metallicFactor = metailic;
         }
 
         float roughness;
         if (aiMaterial->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS) {
-            material.roughness_ = roughness;
+            material.roughness = roughness;
         }
 
         aiColor3D emissive;
         if (aiMaterial->Get(AI_MATKEY_COLOR_EMISSIVE, emissive) == AI_SUCCESS) {
-            material.emissiveFactor_ = glm::vec4(emissive.r, emissive.g, emissive.b, 1.f);
+            material.emissiveFactor = glm::vec4(emissive.r, emissive.g, emissive.b, 1.f);
         }
 
         aiString path;
 
         if (aiMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
-            material.baseColorTextureIndex_ = getTextureIndex(path.C_Str(), true);
+            material.baseColorTextureIndex = getTextureIndex(path.C_Str(), true);
         }
 
         if (aiMaterial->GetTexture(aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &path) == AI_SUCCESS) {
-            material.metallicRoughnessTextureIndex_ = getTextureIndex(path.C_Str(), false);
+            material.metallicRoughnessTextureIndex = getTextureIndex(path.C_Str(), false);
         }
 
         if (aiMaterial->GetTexture(aiTextureType_NORMALS, 0, &path) == AI_SUCCESS) {
-            material.normalTextureIndex_ = getTextureIndex(path.C_Str(), false);
+            material.normalTextureIndex = getTextureIndex(path.C_Str(), false);
         }
 
         if (aiMaterial->GetTexture(aiTextureType_LIGHTMAP, 0, &path) == AI_SUCCESS) {
-            material.occlusionTextureIndex_ = getTextureIndex(path.C_Str(), false);
+            material.occlusionTextureIndex = getTextureIndex(path.C_Str(), false);
         }
 
         if (aiMaterial->GetTexture(aiTextureType_EMISSIVE, 0, &path) == AI_SUCCESS) {
-            material.emissiveTextureIndex_ = getTextureIndex(path.C_Str(), true);
+            material.emissiveTextureIndex = getTextureIndex(path.C_Str(), true);
         }
 
         materials_.push_back(material);
