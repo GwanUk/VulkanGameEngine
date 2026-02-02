@@ -13,8 +13,8 @@ class Camera
 
     void updateView();
     void update(float deltaTime);
-    void updateScene(SceneUniform& sceneUniform) const;
     void rotate(float dx, float dy);
+    void writeScene(SceneUniform& sceneUniform) const;
 
     bool firstPersonMode_{true};
     KeyState keyState_{};
@@ -24,18 +24,19 @@ class Camera
     glm::vec3 dir();
 
   private:
-    float fov{75.f};
-    float znear{0.1f};
-    float zfar{256.f};
+    float fov_{75.f};
+    float znear_{0.1f};
+    float zfar_{256.f};
+    glm::vec3 worldUp_{0.0f, 1.0f, 0.0f};
 
-    float rotationSpeed{0.1f};
-    float movementSpeed{3.f};
+    float rotationSpeed_{0.1f};
+    float movementSpeed_{3.f};
 
     glm::vec3 position_{0.f, 0.f, 3.f};
     glm::vec3 rotation_{};
-    glm::vec3 forwardDir_{};
     glm::vec3 rightDir_{};
-    glm::vec3 upDir_{0.0f, 1.0f, 0.0f};
+    glm::vec3 upDir_{};
+    glm::vec3 forwardDir_{};
 
     glm::mat4 view_{1.f};
     glm::mat4 perspective_;
