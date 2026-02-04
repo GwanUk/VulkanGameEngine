@@ -300,6 +300,8 @@ void Game::updateGui()
 
         // Models Controls
         ImGui::Separator();
+        ImGui::Text("Meshes count rendered: %d culled: %d total: %d", renderer_->renderedMeshes_,
+                    renderer_->culledMeshes_, renderer_->totalMeshes_);
         for (uint32_t i = 0; i < models_.size(); i++) {
             auto& m = models_[i];
 
@@ -441,7 +443,7 @@ void Game::calculateDirectionalLight()
     glm::vec3 wMin(std::numeric_limits<float>::max());
     glm::vec3 wMax(std::numeric_limits<float>::lowest());
     for (const auto& model : models_) {
-        for (const auto& corner : boxCorners(model.boundMin(), model.boundMax())) {
+        for (const auto& corner : ViewFrustum::corners(model.boundMin(), model.boundMax())) {
             glm::vec3 wCorner = glm::vec3(model.matrix() * glm::vec4(corner, 1.f));
             wMin = glm::min(wMin, wCorner);
             wMax = glm::max(wMax, wCorner);
@@ -450,7 +452,7 @@ void Game::calculateDirectionalLight()
 
     glm::vec3 vMin(std::numeric_limits<float>::max());
     glm::vec3 vMax(std::numeric_limits<float>::lowest());
-    for (const auto& coner : boxCorners(wMin, wMax)) {
+    for (const auto& coner : ViewFrustum::corners(wMin, wMax)) {
         glm::vec3 vConer = glm::vec3(lightView * glm::vec4(coner, 1.f));
         vMin = glm::min(vMin, vConer);
         vMax = glm::max(vMax, vConer);
@@ -461,16 +463,6 @@ void Game::calculateDirectionalLight()
 
     sceneUniform_.directionalLightMatrix = lightProj * lightView;
     postUniform_.inverseProj = glm::inverse(lightProj);
-}
-
-std::array<glm::vec3, 8> Game::boxCorners(const glm::vec3& min, const glm::vec3& max)
-{
-    return std::array<glm::vec3, 8>{
-        glm::vec3(min.x, min.y, min.z), glm::vec3(max.x, min.y, min.z),
-        glm::vec3(min.x, max.y, min.z), glm::vec3(max.x, max.y, min.z),
-        glm::vec3(min.x, min.y, max.z), glm::vec3(max.x, min.y, max.z),
-        glm::vec3(min.x, max.y, max.z), glm::vec3(max.x, max.y, max.z),
-    };
 }
 
 } // namespace guk

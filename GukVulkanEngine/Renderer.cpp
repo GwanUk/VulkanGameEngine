@@ -82,6 +82,7 @@ void Renderer::update(uint32_t frameIdx, SceneUniform sceneUniform, SkyboxUnifor
 {
     sceneUniformBuffers_[frameIdx]->update(sceneUniform);
     skyboxUniformBuffers_[frameIdx]->update(skyboxUniform);
+    viewFrustum_.create(sceneUniform.proj * sceneUniform.view);
 }
 
 void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> models)
@@ -147,6 +148,9 @@ void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> m
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
 
     VkDeviceSize offsets[1]{0};
+    totalMeshes_ = 0;
+    renderedMeshes_ = 0;
+    culledMeshes_ = 0;
     for (Model& model : models) {
         if (!model.visible()) {
             continue;
@@ -157,6 +161,14 @@ void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> m
                            sizeof(ModelPushConstants), &modelMatrix);
 
         for (const Mesh& mesh : model.meshes()) {
+            totalMeshes_++;
+
+            if (viewFrustum_.culling(mesh.boundMin(), mesh.boundMax(), modelMatrix)) {
+                culledMeshes_++;
+                continue;
+            }
+            renderedMeshes_++;
+
             VkBuffer vertexBuffer = mesh.getVertexBuffer();
             VkBuffer indexBuffer = mesh.getIndexBuffer();
 

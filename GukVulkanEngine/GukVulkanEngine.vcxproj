@@ -148,6 +148,7 @@
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="RendererPost.cpp" />
     <ClCompile Include="Swapchain.cpp" />
+    <ClCompile Include="ViewFrustum.cpp" />
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -164,6 +165,7 @@
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RendererPost.h" />
     <ClInclude Include="Swapchain.h" />
+    <ClInclude Include="ViewFrustum.h" />
     <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>

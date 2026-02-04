@@ -21,6 +21,7 @@
     <ClCompile Include="RendererPost.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="ViewFrustum.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
@@ -37,6 +38,7 @@
     <ClInclude Include="RendererPost.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="ViewFrustum.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\imgui.frag">

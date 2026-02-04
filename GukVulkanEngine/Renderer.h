@@ -4,6 +4,7 @@
 #include "Buffer.h"
 #include "DataStructures.h"
 #include "Model.h"
+#include "ViewFrustum.h"
 
 namespace guk {
 
@@ -22,8 +23,13 @@ class Renderer
     void draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> models);
     void drawShadow(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> models);
 
+    uint32_t totalMeshes_{};
+    uint32_t renderedMeshes_{};
+    uint32_t culledMeshes_{};
+
   private:
     std::shared_ptr<Device> device_;
+    ViewFrustum viewFrustum_{};
 
     std::unique_ptr<Image2D> msaaColorAttachment_;
     std::shared_ptr<Image2D> colorAttachment_;

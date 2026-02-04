@@ -115,4 +115,10 @@ glm::vec3 Mesh::boundMax() const
     return boundMax_;
 }
 
+void Mesh::setBounds(glm::vec3 min, glm::vec3 max)
+{
+    boundMin_ = min;
+    boundMax_ = max;
+}
+
 } // namespace guk

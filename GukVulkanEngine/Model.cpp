@@ -141,20 +141,18 @@ void Model::allocateMaterialDescriptorSets(VkDescriptorSetLayout layout,
         VkDescriptorImageInfo normalInfo{};
         normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         normalInfo.imageView = m.normalTextureIndex < 0 ? dummyTexture->view()
-                                                         : textures_[m.normalTextureIndex]->view();
-        normalInfo.sampler = m.normalTextureIndex < 0
-                                 ? dummyTexture->sampler()
-                                 : textures_[m.normalTextureIndex]->sampler();
+                                                        : textures_[m.normalTextureIndex]->view();
+        normalInfo.sampler = m.normalTextureIndex < 0 ? dummyTexture->sampler()
+                                                      : textures_[m.normalTextureIndex]->sampler();
 
         VkDescriptorImageInfo metallicRoughnessInfo{};
         metallicRoughnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         metallicRoughnessInfo.imageView = m.metallicRoughnessTextureIndex < 0
                                               ? dummyTexture->view()
                                               : textures_[m.metallicRoughnessTextureIndex]->view();
-        metallicRoughnessInfo.sampler =
-            m.metallicRoughnessTextureIndex < 0
-                ? dummyTexture->sampler()
-                : textures_[m.metallicRoughnessTextureIndex]->sampler();
+        metallicRoughnessInfo.sampler = m.metallicRoughnessTextureIndex < 0
+                                            ? dummyTexture->sampler()
+                                            : textures_[m.metallicRoughnessTextureIndex]->sampler();
 
         VkDescriptorImageInfo occlusionInfo{};
         occlusionInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -293,6 +291,8 @@ void Model::normalizeModel()
         for (auto& vertex : mesh.vertices()) {
             vertex.position = (vertex.position - center) / delta;
         }
+
+        mesh.setBounds((mesh.boundMin() - center) / delta, (mesh.boundMax() - center) / delta);
     }
 
     boundMin_ = (boundMin_ - center) / delta;

@@ -31,6 +31,7 @@ class Mesh
     
     glm::vec3 boundMin() const;
     glm::vec3 boundMax() const;
+    void setBounds(glm::vec3 min, glm::vec3 max);
 
   private:
     std::shared_ptr<Device> device_;
