@@ -29,25 +29,38 @@ class Game
     std::unique_ptr<RendererPost> rendererPost_;
     std::unique_ptr<RendererGui> rendererGui_;
 
-    bool resized_{false};
+    bool resized_{};
     MouseState mouseState_{};
     Camera camera_{};
-
     std::vector<Model> models_{};
 
     SceneUniform sceneUniform_{};
     SkyboxUniform skyboxUniform_{};
     PostUniform postUniform_{};
 
+    uint32_t frameIdx_{};
+    uint32_t semaphoreIdx_{};
+    std::array<bool, Device::MAX_FRAMES_IN_FLIGHT> queryDataReady_;
+
+    float currentCpuFps_{};
+    float cpuTimesSinceLastUpdate_{};
+    uint32_t cpuFramesSinceLastUpdate_{};
+
+    float currentGpuFps_{};
+    float gpuTimesSinceLastUpdate_{};
+    uint32_t gpuFramesSinceLastUpdate_{};
+
     void setCallBack();
     void createSyncObjects();
     void createModels();
 
     void recreateSwapChain();
+    void calculatePerformanceMetrics(float deltaTime);
+
     void updateGui();
-    void drawFrame();
-    void update(float deltaTime);
     void calculateDirectionalLight();
+
+    void drawFrame();
 };
 
 } // namespace guk

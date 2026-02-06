@@ -40,6 +40,9 @@ class Device
     VkSampler samplerLinearRepeat() const;
     VkSampler samplerLinearClamp() const;
 
+    VkQueryPool queryPools(size_t index);
+    float timestampPeriod() const;
+
   private:
     VkInstance instance_{};
     VkPhysicalDevice physicalDevice_{};
@@ -47,6 +50,7 @@ class Device
 
     VkPipelineCache cache_{};
     VkFormat depthStencilFmt_{};
+    std::array<VkSampler, 4> samplers_{};
 
     uint32_t queueFaimlyIdx_{uint32_t(-1)};
     VkQueue queue_{};
@@ -55,7 +59,8 @@ class Device
     std::array<VkCommandBuffer, MAX_FRAMES_IN_FLIGHT> cmdBuffers_{};
     VkDescriptorPool descPool_{};
 
-    std::array<VkSampler, 4> samplers_{};
+    std::array<VkQueryPool, MAX_FRAMES_IN_FLIGHT> queryPools_;
+    float timestampPeriod_;
 
     const char* validationLayer_{"VK_LAYER_KHRONOS_validation"};
     const char* swapchainExtension_{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -68,6 +73,7 @@ class Device
     void createCommandPool();
     void createDescriptorPool();
     void createSamplers();
+    void createQueryPools();
 };
 
 } // namespace guk

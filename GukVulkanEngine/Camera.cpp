@@ -78,17 +78,17 @@ void Camera::writeScene(SceneUniform& sceneUniform) const
     sceneUniform.cameraPos = position_;
 }
 
-glm::vec3 Camera::pos()
+glm::vec3 Camera::pos() const
 {
     return position_;
 }
 
-glm::vec3 Camera::rot()
+glm::vec3 Camera::rot() const
 {
     return rotation_;
 }
 
-glm::vec3 Camera::dir()
+glm::vec3 Camera::dir() const
 {
     return forwardDir_;
 }

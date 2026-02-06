@@ -86,17 +86,17 @@ void RendererGui::update(uint32_t frameIdx)
 }
 
 void RendererGui::draw(VkCommandBuffer cmd, uint32_t frameIdx,
-                       const std::shared_ptr<Image2D> colorAttahcment)
+                       const std::shared_ptr<Image2D> renderTarget)
 {
     VkRenderingAttachmentInfo renderingAttachmentInfo{};
     renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfo.imageView = colorAttahcment->view();
+    renderingAttachmentInfo.imageView = renderTarget->view();
     renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
     VkRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
-    renderingInfo.renderArea = {0, 0, colorAttahcment->width(), colorAttahcment->height()};
+    renderingInfo.renderArea = {0, 0, renderTarget->width(), renderTarget->height()};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &renderingAttachmentInfo;
@@ -111,8 +111,8 @@ void RendererGui::draw(VkCommandBuffer cmd, uint32_t frameIdx,
     VkViewport viewport{};
     viewport.x = 0.f;
     viewport.y = 0.f;
-    viewport.width = static_cast<float>(colorAttahcment->width());
-    viewport.height = static_cast<float>(colorAttahcment->height());
+    viewport.width = static_cast<float>(renderTarget->width());
+    viewport.height = static_cast<float>(renderTarget->height());
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -180,7 +180,7 @@ void RendererGui::init()
     ImGuiIO& io = ImGui::GetIO();
     io.FontGlobalScale = scale_;
 
-    const std::string font = "./assets/Noto_Sans_KR/static/NotoSansKR-SemiBold.ttf";
+    const std::string font = "assets\\Noto_Sans_KR\\static\\NotoSansKR-SemiBold.ttf";
 
     ImFontConfig config{};
     config.MergeMode = false;

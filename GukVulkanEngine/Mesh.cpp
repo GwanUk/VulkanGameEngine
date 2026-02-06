@@ -64,7 +64,7 @@ void Mesh::calculateTangents()
 {
     std::vector<glm::vec3> tangents(vertices_.size(), glm::vec3(0.0f));
 
-    for (uint32_t i = 0; i < indicesSize(); i += 3) {
+    for (size_t i = 0; i < indicesSize(); i += 3) {
         const uint32_t& i0 = indices_[i];
         const uint32_t& i1 = indices_[i + 1];
         const uint32_t& i2 = indices_[i + 2];

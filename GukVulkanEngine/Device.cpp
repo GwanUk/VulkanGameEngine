@@ -45,10 +45,15 @@ Device::Device(const std::vector<const char*>& instanceExtensions)
     createCommandPool();
     createDescriptorPool();
     createSamplers();
+    createQueryPools();
 }
 
 Device::~Device()
 {
+    for (const auto& queryPool : queryPools_) {
+        vkDestroyQueryPool(device_, queryPool, nullptr);
+    }
+
     for (const auto& sampler : samplers_) {
         vkDestroySampler(device_, sampler, nullptr);
     }
@@ -116,7 +121,8 @@ VkSampleCountFlagBits Device::smapleCount() const
 void Device::checkSurfaceSupport(VkSurfaceKHR surface) const
 {
     VkBool32 presentSupport = false;
-    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, queueFaimlyIdx_, surface, &presentSupport);
+    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, queueFaimlyIdx_, surface,
+                                         &presentSupport);
 
     if (!presentSupport) {
         exitLog("Separate graphics and presenting queues are not supported yet!");
@@ -212,6 +218,16 @@ VkSampler Device::samplerLinearRepeat() const
 VkSampler Device::samplerLinearClamp() const
 {
     return samplers_[3];
+}
+
+VkQueryPool Device::queryPools(size_t index)
+{
+    return queryPools_[index];
+}
+
+float Device::timestampPeriod() const
+{
+    return timestampPeriod_;
 }
 
 void Device::createInstance(std::vector<const char*> extensions)
@@ -421,15 +437,15 @@ void Device::createDescriptorPool()
 {
     std::vector<VkDescriptorPoolSize> descPoolSize(2);
     descPoolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descPoolSize[0].descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT + 2;
+    descPoolSize[0].descriptorCount = 30;
     descPoolSize[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descPoolSize[1].descriptorCount = 6 + 5 + 1 + 10;
+    descPoolSize[1].descriptorCount = 130;
 
     VkDescriptorPoolCreateInfo descPoolCI{};
     descPoolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descPoolCI.poolSizeCount = static_cast<uint32_t>(descPoolSize.size());
     descPoolCI.pPoolSizes = descPoolSize.data();
-    descPoolCI.maxSets = 4 + 7 + 2;
+    descPoolCI.maxSets = 40;
 
     VK_CHECK(vkCreateDescriptorPool(device_, &descPoolCI, nullptr, &descPool_));
 }
@@ -484,6 +500,27 @@ void Device::createSamplers()
     samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
     VK_CHECK(vkCreateSampler(device_, &samplerCI, nullptr, &samplers_[3]));
+}
+
+void Device::createQueryPools()
+{
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+
+    if (!properties.limits.timestampComputeAndGraphics) {
+        exitLog("timestamp queries are not supported!");
+    }
+
+    timestampPeriod_ = properties.limits.timestampPeriod;
+
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkQueryPoolCreateInfo queryPoolCI{};
+        queryPoolCI.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryPoolCI.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        queryPoolCI.queryCount = 2; // Begin and end timestamps
+
+        VK_CHECK(vkCreateQueryPool(device_, &queryPoolCI, nullptr, &queryPools_[i]));
+    }
 }
 
 VkShaderModule Device::createShaderModule(const std::string& spv) const

@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace guk {
+
 class Camera
 {
   public:
@@ -19,9 +20,9 @@ class Camera
     bool firstPersonMode_{true};
     KeyState keyState_{};
 
-    glm::vec3 pos();
-    glm::vec3 rot();
-    glm::vec3 dir();
+    glm::vec3 pos() const;
+    glm::vec3 rot() const;
+    glm::vec3 dir() const;
 
   private:
     float fov_{75.f};
@@ -30,9 +31,9 @@ class Camera
     glm::vec3 worldUp_{0.0f, 1.0f, 0.0f};
 
     float rotationSpeed_{0.1f};
-    float movementSpeed_{3.f};
+    float movementSpeed_{10.f};
 
-    glm::vec3 position_{0.f, 0.f, 3.f};
+    glm::vec3 position_{0.f, 0.f, 4.f};
     glm::vec3 rotation_{};
     glm::vec3 rightDir_{};
     glm::vec3 upDir_{};
@@ -41,4 +42,5 @@ class Camera
     glm::mat4 view_{1.f};
     glm::mat4 perspective_;
 };
+
 } // namespace guk

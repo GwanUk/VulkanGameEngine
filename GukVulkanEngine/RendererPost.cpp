@@ -47,7 +47,7 @@ void RendererPost::update(uint32_t frameIdx, PostUniform postUniform)
 }
 
 void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
-                        std::shared_ptr<Image2D> swapchainImg)
+                        std::shared_ptr<Image2D> renderTarget)
 {
     sceneTexture_->transition(cmd, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
                               VK_ACCESS_2_SHADER_READ_BIT,
@@ -62,7 +62,7 @@ void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
 
     VkRenderingAttachmentInfo colorAttachment{};
     colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    colorAttachment.imageView = swapchainImg->view();
+    colorAttachment.imageView = renderTarget->view();
     colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -70,7 +70,7 @@ void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
 
     VkRenderingInfo renderingInfo{};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea = {0, 0, swapchainImg->width(), swapchainImg->height()};
+    renderingInfo.renderArea = {0, 0, renderTarget->width(), renderTarget->height()};
     renderingInfo.layerCount = 1;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &colorAttachment;
@@ -82,15 +82,15 @@ void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
     VkViewport viewport{};
     viewport.x = 0.f;
     viewport.y = 0.f;
-    viewport.width = static_cast<float>(swapchainImg->width());
-    viewport.height = static_cast<float>(swapchainImg->height());
+    viewport.width = static_cast<float>(renderTarget->width());
+    viewport.height = static_cast<float>(renderTarget->height());
     viewport.minDepth = 0.f;
     viewport.maxDepth = 1.f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = {swapchainImg->width(), swapchainImg->height()};
+    scissor.extent = {renderTarget->width(), renderTarget->height()};
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     std::array<VkDescriptorSet, 4> sets{uniformSets_[frameIdx], bloomTextureSets_[0],
@@ -105,7 +105,7 @@ void RendererPost::draw(VkCommandBuffer cmd, uint32_t frameIdx,
 
 void RendererPost::bloomDown(VkCommandBuffer cmd)
 {
-    for (uint32_t i = 1; i < BLOOM_LEVELS; i++) {
+    for (size_t i = 1; i < BLOOM_LEVELS; i++) {
         bloomTextures_[i - 1]->transition(cmd, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
                                           VK_ACCESS_2_SHADER_READ_BIT,
                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -166,7 +166,7 @@ void RendererPost::bloomDown(VkCommandBuffer cmd)
 void RendererPost::bloomUp(VkCommandBuffer cmd)
 {
     for (uint32_t i = 0; i < BLOOM_LEVELS - 1; i++) {
-        uint32_t l = BLOOM_LEVELS - 2 - i;
+        size_t l = static_cast<size_t>(BLOOM_LEVELS) - 2 - i;
 
         bloomTextures_[l + 1]->transition(cmd, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
                                           VK_ACCESS_2_SHADER_READ_BIT,

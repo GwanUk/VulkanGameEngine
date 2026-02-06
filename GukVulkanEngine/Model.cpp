@@ -14,7 +14,7 @@ Model::Model(std::shared_ptr<Device> device) : device_(device)
 {
 }
 
-Model Model::load(std::shared_ptr<Device> device, const std::string& file)
+Model Model::load(std::shared_ptr<Device> device, const std::string& file, bool normalizeModel)
 {
     Model model{device};
 
@@ -27,7 +27,7 @@ Model Model::load(std::shared_ptr<Device> device, const std::string& file)
     const aiScene* scene = aiImporter.ReadFile(file, aiProcess_Triangulate);
 
     model.processMesh(scene->mRootNode, scene, glm::mat4{1.f});
-    model.normalizeModel();
+    model.calculateBound(normalizeModel);
     model.createMeshBuffers();
 
     model.processMaterial(scene);
@@ -274,7 +274,15 @@ void Model::processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix)
     }
 }
 
-void Model::normalizeModel()
+void Model::createMeshBuffers()
+{
+    for (auto& mesh : meshes_) {
+        mesh.createVertexBuffer();
+        mesh.createIndexBuffer();
+    }
+}
+
+void Model::calculateBound(bool normalizeModel)
 {
     boundMin_ = glm::vec3(std::numeric_limits<float>::max());
     boundMax_ = glm::vec3(std::numeric_limits<float>::lowest());
@@ -284,26 +292,20 @@ void Model::normalizeModel()
         boundMax_ = glm::max(boundMax_, mesh.boundMax());
     }
 
-    glm::vec3 center = (boundMax_ + boundMin_) * 0.5f;
-    float delta = glm::compMax(boundMax_ - boundMin_);
+    if (normalizeModel) {
+        glm::vec3 center = (boundMax_ + boundMin_) * 0.5f;
+        float delta = glm::compMax(boundMax_ - boundMin_);
 
-    for (auto& mesh : meshes_) {
-        for (auto& vertex : mesh.vertices()) {
-            vertex.position = (vertex.position - center) / delta;
+        for (auto& mesh : meshes_) {
+            for (auto& vertex : mesh.vertices()) {
+                vertex.position = (vertex.position - center) / delta;
+            }
+
+            mesh.setBounds((mesh.boundMin() - center) / delta, (mesh.boundMax() - center) / delta);
         }
 
-        mesh.setBounds((mesh.boundMin() - center) / delta, (mesh.boundMax() - center) / delta);
-    }
-
-    boundMin_ = (boundMin_ - center) / delta;
-    boundMax_ = (boundMax_ - center) / delta;
-}
-
-void Model::createMeshBuffers()
-{
-    for (auto& mesh : meshes_) {
-        mesh.createVertexBuffer();
-        mesh.createIndexBuffer();
+        boundMin_ = (boundMin_ - center) / delta;
+        boundMax_ = (boundMax_ - center) / delta;
     }
 }
 

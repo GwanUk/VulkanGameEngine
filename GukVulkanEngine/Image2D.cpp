@@ -226,21 +226,15 @@ void Image2D::transition(VkCommandBuffer cmd, VkPipelineStageFlagBits2 stage,
                          VkAccessFlagBits2 access, VkImageLayout layout)
 {
     VkImageMemoryBarrier2 barrier = barrier2(stage, access, layout);
-
-    VkDependencyInfo di{};
-    di.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    di.imageMemoryBarrierCount = 1;
-    di.pImageMemoryBarriers = &barrier;
-
-    vkCmdPipelineBarrier2(cmd, &di);
+    transition(cmd, barrier);
 }
 
-void Image2D::transitions(VkCommandBuffer cmd, std::vector<VkImageMemoryBarrier2> barriers)
+void Image2D::transition(VkCommandBuffer cmd, VkImageMemoryBarrier2 barrier)
 {
     VkDependencyInfo dependencyInfo{};
     dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
-    dependencyInfo.pImageMemoryBarriers = barriers.data();
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
 
     vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 }

@@ -7,7 +7,6 @@ Renderer::Renderer(std::shared_ptr<Device> device, uint32_t width, uint32_t heig
     : device_(device), msaaColorAttachment_(std::make_unique<Image2D>(device_)),
       colorAttachment_(std::make_unique<Image2D>(device_)),
       msaaDepthStencilAttachment_(std::make_unique<Image2D>(device_)),
-      depthStencilAttachment_(std::make_unique<Image2D>(device_)),
       dummyTexture_(std::make_shared<Image2D>(device_)),
       shadowAttachment_(std::make_shared<Image2D>(device_))
 {
@@ -48,6 +47,11 @@ void Renderer::allocateModelDescriptorSets(std::vector<Model>& models)
 
 void Renderer::createAttachments(uint32_t width, uint32_t height)
 {
+    msaaDepthStencilAttachment_->createImage(device_->depthStencilFormat(), width, height,
+                                             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                                                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                             device_->smapleCount());
+
     msaaColorAttachment_->createImage(VK_FORMAT_R16G16B16A16_SFLOAT, width, height,
                                       VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
                                           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -57,15 +61,6 @@ void Renderer::createAttachments(uint32_t width, uint32_t height)
                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                   VK_SAMPLE_COUNT_1_BIT);
     colorAttachment_->setSampler(device_->samplerLinearClamp());
-
-    msaaDepthStencilAttachment_->createImage(device_->depthStencilFormat(), width, height,
-                                             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                                                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                             device_->smapleCount());
-
-    depthStencilAttachment_->createImage(device_->depthStencilFormat(), width, height,
-                                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                         VK_SAMPLE_COUNT_1_BIT);
 }
 
 std::shared_ptr<Image2D> Renderer::colorAttachment() const
@@ -87,15 +82,9 @@ void Renderer::update(uint32_t frameIdx, SceneUniform sceneUniform, SkyboxUnifor
 
 void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> models)
 {
-    std::vector<VkImageMemoryBarrier2> imageBarriers{
-        msaaColorAttachment_->barrier2(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                       VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-        colorAttachment_->barrier2(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)};
-
-    Image2D::transitions(cmd, imageBarriers);
+    colorAttachment_->transition(cmd, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     VkRenderingAttachmentInfo colorAttachment{};
     colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -115,9 +104,6 @@ void Renderer::draw(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Model> m
     depthStecnilAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthStecnilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthStecnilAttachment.clearValue.depthStencil = {1.f, 0};
-    depthStecnilAttachment.resolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
-    depthStecnilAttachment.resolveImageView = depthStencilAttachment_->view();
-    depthStecnilAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkRenderingInfo renderingInfo{};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -236,7 +222,7 @@ void Renderer::drawShadow(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Mo
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
                             &uniformDescriptorSets_[frameIdx], 0, nullptr);
 
-    vkCmdSetDepthBias(cmd, 1.1f, 0.f, 2.8f);
+    vkCmdSetDepthBias(cmd, 1.1f, 0.f, 3.1f);
 
     VkDeviceSize offsets[1]{0};
     for (Model& model : models) {
@@ -264,7 +250,7 @@ void Renderer::drawShadow(VkCommandBuffer cmd, uint32_t frameIdx, std::vector<Mo
         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     barrier.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    Image2D::transitions(cmd, {barrier});
+    Image2D::transition(cmd, barrier);
 }
 
 void Renderer::createUniform()
@@ -283,7 +269,7 @@ void Renderer::createTextures()
     dummyTexture_->createTexture("assets\\blender_uv_grid_2k.png", false);
     dummyTexture_->setSampler(device_->samplerLinearRepeat());
 
-    std::string path = "C:\\uk_dir\\resources\\ibl_ktx2\\radkow_lake\\";
+    std::string path = "assets\\cedar_bridge_sunset\\";
 
     skyboxTextures_[0] = std::make_unique<Image2D>(device_);
     skyboxTextures_[0]->createTextureKtx2(path + "specular_out.ktx2", true);

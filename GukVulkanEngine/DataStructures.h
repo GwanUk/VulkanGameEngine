@@ -29,10 +29,10 @@ struct SceneUniform
 
 struct MaterialUniform
 {
-    glm::vec4 emissiveFactor = glm::vec4(0.0f);
-    glm::vec4 baseColorFactor = glm::vec4(1.0f);
-    float roughness = 1.0f;
-    float metallicFactor = 0.0f;
+    glm::vec4 emissiveFactor = glm::vec4(0.f);
+    glm::vec4 baseColorFactor = glm::vec4(1.f);
+    float roughness = 1.f;
+    float metallicFactor = 0.f;
     int32_t baseColorTextureIndex = -1;
     int32_t emissiveTextureIndex = -1;
     int32_t normalTextureIndex = -1;
@@ -42,8 +42,8 @@ struct MaterialUniform
 
 struct alignas(16) SkyboxUniform
 {
-    float environmentIntensity = 1.0f;
-    float roughnessLevel = 0.5f;
+    float environmentIntensity = 1.f;
+    float roughnessLevel = 0.f;
     uint32_t useIrradianceMap = 0;
 };
 
@@ -53,7 +53,7 @@ struct PostUniform
     uint32_t shadowDepthView = 0;
     float depthScale = 0.1f;
     float bloomStrength = 0.1f;
-    float exposure = 1.0f;
+    float exposure = 1.f;
     float gamma = 2.2f;
 };
 
@@ -82,7 +82,7 @@ struct MouseState
         bool right = false;
         bool middle = false;
     } buttons;
-    glm::vec2 position{0.0f, 0.0f};
+    glm::vec2 position{0.f, 0.f};
 };
 
 struct KeyState

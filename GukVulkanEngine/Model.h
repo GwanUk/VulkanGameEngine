@@ -15,7 +15,7 @@ class Model
   public:
     Model(std::shared_ptr<Device> device);
 
-    static Model load(std::shared_ptr<Device> device, const std::string& file);
+    static Model load(std::shared_ptr<Device> device, const std::string& file, bool normalizeModel = false);
 
     std::string name() const;
     bool& visible();
@@ -61,8 +61,8 @@ class Model
     glm::vec3 boundMax_{};
 
     void processMesh(aiNode* node, const aiScene* scene, glm::mat4 matrix);
-    void normalizeModel();
     void createMeshBuffers();
+    void calculateBound(bool normalizeModel);
 
     void processMaterial(const aiScene* scene);
     uint32_t getTextureIndex(const std::string& textureFile, bool srgb);

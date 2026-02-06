@@ -15,7 +15,7 @@ class RendererPost
 
     void resized(uint32_t width, uint32_t height);
     void update(uint32_t frameIdx, PostUniform postUniform);
-    void draw(VkCommandBuffer cmd, uint32_t frameIdx, std::shared_ptr<Image2D> swapchainImg);
+    void draw(VkCommandBuffer cmd, uint32_t frameIdx, std::shared_ptr<Image2D> renderTarget);
 
   private:
     std::shared_ptr<Device> device_;

@@ -34,7 +34,6 @@ class Renderer
     std::unique_ptr<Image2D> msaaColorAttachment_;
     std::shared_ptr<Image2D> colorAttachment_;
     std::unique_ptr<Image2D> msaaDepthStencilAttachment_;
-    std::unique_ptr<Image2D> depthStencilAttachment_;
     std::array<std::unique_ptr<Image2D>, 3> skyboxTextures_;
     std::shared_ptr<Image2D> dummyTexture_{};
     std::shared_ptr<Image2D> shadowAttachment_;

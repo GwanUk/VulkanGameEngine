@@ -49,7 +49,9 @@ void Game::run()
         lastTime = currentTime;
         deltaTime = glm::min(deltaTime, 0.033f); // Max 33ms (30 FPS minimum)
 
+        calculatePerformanceMetrics(deltaTime);
         updateGui();
+
         camera_.update(deltaTime);
         camera_.writeScene(sceneUniform_);
         calculateDirectionalLight();
@@ -192,16 +194,13 @@ void Game::createSyncObjects()
 
 void Game::createModels()
 {
-    models_.push_back(
-        Model::load(device_, "C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\DamagedHelmet\\glTF-"
-                             "Binary\\DamagedHelmet.glb")
-            .setRotation(glm::vec3(180.f, 0.f, 0.f)));
+    models_.push_back(Model::load(device_, "assets\\DamagedHelmet\\glTF-"
+                                           "Binary\\DamagedHelmet.glb")
+                          .setRotation(glm::vec3(180.f, 0.f, 0.f)));
 
-    models_.push_back(
-        Model::load(device_,
-                    "C:\\uk_dir\\resources\\glTF-Sample-Models\\2.0\\Cube\\glTF\\Cube.gltf")
-            .setTranslation(glm::vec3(0.f, -1.f, 0.f))
-            .setScale(glm::vec3(10.f, 0.1f, 10.f)));
+    models_.push_back(Model::load(device_, "assets\\Sponza\\glTF\\Sponza.gltf")
+                          .setTranslation(glm::vec3(0.f, -1.f, 0.f))
+                          .setRotation(glm::vec3(0.f, 90.f, 0.f)));
 }
 
 void Game::recreateSwapChain()
@@ -216,6 +215,26 @@ void Game::recreateSwapChain()
 
     renderer_->createAttachments(swapchain_->width(), swapchain_->height());
     rendererPost_->resized(swapchain_->width(), swapchain_->height());
+}
+
+void Game::calculatePerformanceMetrics(float deltaTime)
+{
+    cpuTimesSinceLastUpdate_ += deltaTime;
+    cpuFramesSinceLastUpdate_++;
+
+    if (cpuTimesSinceLastUpdate_ >= 0.5f) {
+        // CPU
+        currentCpuFps_ = static_cast<float>(cpuFramesSinceLastUpdate_) / cpuTimesSinceLastUpdate_;
+        currentCpuFps_ = glm::clamp(currentCpuFps_, 0.1f, 1e3f);
+        cpuTimesSinceLastUpdate_ = 0.f;
+        cpuFramesSinceLastUpdate_ = 0;
+
+        // GPU
+        currentGpuFps_ = static_cast<float>(gpuFramesSinceLastUpdate_) / gpuTimesSinceLastUpdate_;
+        currentGpuFps_ = glm::clamp(currentGpuFps_, 0.1f, 1e3f);
+        gpuTimesSinceLastUpdate_ = 0.f;
+        gpuFramesSinceLastUpdate_ = 0;
+    }
 }
 
 void Game::updateGui()
@@ -233,6 +252,50 @@ void Game::updateGui()
     ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("Render Settings")) {
+        // Cpu/Gpu Performance Metrics
+        if (ImGui::CollapsingHeader("CPU/GPU Performance Metrics",
+                                    ImGuiTreeNodeFlags_DefaultOpen)) {
+            // CPU FPS
+            ImVec4 cpuFpsColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+            if (currentCpuFps_ < 30.0f) {
+                cpuFpsColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+            } else if (currentCpuFps_ < 60.0f) {
+                cpuFpsColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+            }
+
+            ImGui::TextColored(cpuFpsColor, "!");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Performance Indicator\nCPU: Frame rate (includes CPU "
+                                  "overhead)\nGreen: >60 FPS\nYellow: 30-60 FPS\nRed: <30 FPS");
+            }
+            ImGui::SameLine();
+            ImGui::Text("CPU FPS: %.1f (%.2f ms/frame)", currentCpuFps_,
+                        1e3f / std::max(currentCpuFps_, 1.0f));
+
+            // GPU FPS
+            ImVec4 gpuFpsColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+            if (currentGpuFps_ < 30.0f) {
+                gpuFpsColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+            } else if (currentGpuFps_ < 60.0f) {
+                gpuFpsColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+            }
+
+            ImGui::TextColored(gpuFpsColor, "!");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Performance Indicator\nGPU: Pure GPU rendering time (excludes "
+                                  "presentation)\nGreen: >60 FPS\nYellow: 30-60 FPS\nRed: <30 FPS");
+            }
+            ImGui::SameLine();
+            ImGui::Text("GPU FPS: %.1f (%.2f ms/frame)", currentGpuFps_,
+                        1e3f / std::max(currentGpuFps_, 1.0f));
+        }
+
+        // Meshes Rendering Metrics
+        if (ImGui::CollapsingHeader("Meshes Rendering Metrics", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Meshes Rendered: %d", renderer_->renderedMeshes_);
+            ImGui::Text("Meshes Culled: %d", renderer_->culledMeshes_);
+            ImGui::Text("Meshes Total: %d", renderer_->totalMeshes_);
+        }
 
         // Camera Information
         if (ImGui::CollapsingHeader("Camera Information", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -252,9 +315,9 @@ void Game::updateGui()
                         sceneUniform_.directionalLightDir.x, sceneUniform_.directionalLightDir.y,
                         sceneUniform_.directionalLightDir.z);
 
-            static float elevation = 55.f;
+            static float elevation = 65.f;
             ImGui::SliderFloat("Light Elevation", &elevation, -90.0f, 90.0f, "%.1f°");
-            static float azimuth = 45.f;
+            static float azimuth = 10.f;
             ImGui::SliderFloat("Light Azimuth", &azimuth, -180.0f, 180.0f, "%.1f°");
 
             sceneUniform_.directionalLightDir =
@@ -264,7 +327,7 @@ void Game::updateGui()
 
             static std::array<int, 3> color{255, 255, 255};
             ImGui::SliderInt3("Light Color", color.data(), 0, 255);
-            static float lightIntensity = 10;
+            static float lightIntensity = 1.0f;
             ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 100.0f, "%.2f");
 
             glm::vec3 lightColor = glm::vec3(color[0], color[1], color[2]) / 255.f;
@@ -299,136 +362,36 @@ void Game::updateGui()
         }
 
         // Models Controls
-        ImGui::Separator();
-        ImGui::Text("Meshes count rendered: %d culled: %d total: %d", renderer_->renderedMeshes_,
-                    renderer_->culledMeshes_, renderer_->totalMeshes_);
-        for (uint32_t i = 0; i < models_.size(); i++) {
-            auto& m = models_[i];
+        if (ImGui::CollapsingHeader("Models Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            for (uint32_t i = 0; i < models_.size(); i++) {
+                auto& m = models_[i];
 
-            ImGui::Checkbox(std::format("{}##{}", m.name(), i).c_str(), &m.visible());
+                ImGui::Checkbox(std::format("{}##{}", m.name(), i).c_str(), &m.visible());
 
-            std::array<float, 3> pos{m.getTranslation().x, m.getTranslation().y,
-                                     m.getTranslation().z};
-            if (ImGui::SliderFloat3(std::format("Position##{}", i).c_str(), pos.data(), -50.0f,
-                                    50.0f, "%.2f")) {
-                m.setTranslation(glm::vec3(pos[0], pos[1], pos[2]));
-            }
+                std::array<float, 3> pos{m.getTranslation().x, m.getTranslation().y,
+                                         m.getTranslation().z};
+                if (ImGui::SliderFloat3(std::format("Position##{}", i).c_str(), pos.data(), -50.0f,
+                                        50.0f, "%.2f")) {
+                    m.setTranslation(glm::vec3(pos[0], pos[1], pos[2]));
+                }
 
-            std::array<float, 3> rot{m.getRotation().x, m.getRotation().y, m.getRotation().z};
-            if (ImGui::SliderFloat3(std::format("Rotation##{}", i).c_str(), rot.data(), -180.0f,
-                                    180.0f, "%.2f")) {
-                m.setRotation(glm::vec3(rot[0], rot[1], rot[2]));
-            }
+                std::array<float, 3> rot{m.getRotation().x, m.getRotation().y, m.getRotation().z};
+                if (ImGui::SliderFloat3(std::format("Rotation##{}", i).c_str(), rot.data(), -180.0f,
+                                        180.0f, "%.2f")) {
+                    m.setRotation(glm::vec3(rot[0], rot[1], rot[2]));
+                }
 
-            std::array<float, 3> scale{m.getScale().x, m.getScale().y, m.getScale().z};
-            if (ImGui::SliderFloat3(std::format("Scale##{}", i).c_str(), scale.data(), 0.1f, 50.0f,
-                                    "%.2f")) {
-                m.setScale(glm::vec3(scale[0], scale[1], scale[2]));
+                std::array<float, 3> scale{m.getScale().x, m.getScale().y, m.getScale().z};
+                if (ImGui::SliderFloat3(std::format("Scale##{}", i).c_str(), scale.data(), 0.1f,
+                                        50.0f, "%.2f")) {
+                    m.setScale(glm::vec3(scale[0], scale[1], scale[2]));
+                }
             }
         }
     }
+
     ImGui::End();
-
     ImGui::Render();
-}
-
-void Game::drawFrame()
-{
-    static uint32_t frameIdx = 0;
-    static uint32_t semaphoreIdx = 0;
-    uint32_t imageIdx = 0;
-
-    VK_CHECK(vkWaitForFences(device_->get(), 1, &fences_[frameIdx], VK_TRUE, UINT64_MAX));
-
-    VkResult result =
-        vkAcquireNextImageKHR(device_->get(), swapchain_->get(), UINT64_MAX,
-                              drawSemaphores_[semaphoreIdx], VK_NULL_HANDLE, &imageIdx);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChain();
-        return;
-    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        exitLog("failed to acquire swap chain image!");
-    }
-
-    renderer_->update(frameIdx, sceneUniform_, skyboxUniform_);
-    rendererPost_->update(frameIdx, postUniform_);
-    rendererGui_->update(frameIdx);
-
-    VK_CHECK(vkResetFences(device_->get(), 1, &fences_[frameIdx]));
-    VK_CHECK(vkResetCommandBuffer(device_->cmdBuffers(frameIdx), 0));
-
-    VkCommandBuffer cmd = device_->cmdBuffers(frameIdx);
-
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = 0;
-    beginInfo.pInheritanceInfo = nullptr;
-    VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
-
-    swapchain_->image(imageIdx)->transition(cmd, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-    renderer_->drawShadow(cmd, frameIdx, models_);
-    renderer_->draw(cmd, frameIdx, models_);
-    rendererPost_->draw(cmd, frameIdx, swapchain_->image(imageIdx));
-    rendererGui_->draw(cmd, frameIdx, swapchain_->image(imageIdx));
-
-    swapchain_->image(imageIdx)->transition(cmd, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-                                            VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
-    VK_CHECK(vkEndCommandBuffer(device_->cmdBuffers(frameIdx)));
-
-    VkSemaphoreSubmitInfo waitSemaphoreSI{};
-    waitSemaphoreSI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    waitSemaphoreSI.semaphore = drawSemaphores_[semaphoreIdx];
-    waitSemaphoreSI.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    waitSemaphoreSI.value = 0;
-    waitSemaphoreSI.deviceIndex = 0;
-
-    VkSemaphoreSubmitInfo signalSemaphoreSI{};
-    signalSemaphoreSI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    signalSemaphoreSI.semaphore = prsntSemaphores_[semaphoreIdx];
-    signalSemaphoreSI.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    signalSemaphoreSI.value = 0;
-    signalSemaphoreSI.deviceIndex = 0;
-
-    VkCommandBufferSubmitInfo cmdBufferSI{};
-    cmdBufferSI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    cmdBufferSI.commandBuffer = device_->cmdBuffers(frameIdx);
-    cmdBufferSI.deviceMask = 0;
-
-    VkSubmitInfo2 si{};
-    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    si.waitSemaphoreInfoCount = 1;
-    si.pWaitSemaphoreInfos = &waitSemaphoreSI;
-    si.commandBufferInfoCount = 1;
-    si.pCommandBufferInfos = &cmdBufferSI;
-    si.signalSemaphoreInfoCount = 1;
-    si.pSignalSemaphoreInfos = &signalSemaphoreSI;
-
-    VK_CHECK(vkQueueSubmit2(device_->queue(), 1, &si, fences_[frameIdx]));
-
-    VkPresentInfoKHR pi{};
-    pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    pi.waitSemaphoreCount = 1;
-    pi.pWaitSemaphores = &prsntSemaphores_[semaphoreIdx];
-    pi.swapchainCount = 1;
-    pi.pSwapchains = &swapchain_->get();
-    pi.pImageIndices = &imageIdx;
-    pi.pResults = nullptr;
-
-    result = vkQueuePresentKHR(device_->queue(), &pi);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized_) {
-        resized_ = false;
-        recreateSwapChain();
-    } else if (result != VK_SUCCESS) {
-        exitLog("failed to present swap chain image!");
-    }
-
-    frameIdx = (frameIdx + 1) % Device::MAX_FRAMES_IN_FLIGHT;
-    semaphoreIdx = (semaphoreIdx + 1) % swapchain_->size();
 }
 
 void Game::calculateDirectionalLight()
@@ -463,6 +426,123 @@ void Game::calculateDirectionalLight()
 
     sceneUniform_.directionalLightMatrix = lightProj * lightView;
     postUniform_.inverseProj = glm::inverse(lightProj);
+}
+
+void Game::drawFrame()
+{
+    VK_CHECK(vkWaitForFences(device_->get(), 1, &fences_[frameIdx_], VK_TRUE, UINT64_MAX));
+
+    uint64_t timestamps[2];
+    if (queryDataReady_[frameIdx_]) {
+        VkResult result = vkGetQueryPoolResults(device_->get(), device_->queryPools(frameIdx_), 0,
+                                                2, sizeof(timestamps), timestamps, sizeof(uint64_t),
+                                                VK_QUERY_RESULT_64_BIT);
+        if (result == VK_SUCCESS) {
+            uint64_t timeDiff = timestamps[1] - timestamps[0];
+            gpuTimesSinceLastUpdate_ +=
+                static_cast<float>(timeDiff) * device_->timestampPeriod() * 1e-9f;
+            gpuFramesSinceLastUpdate_++;
+        }
+    }
+    queryDataReady_[frameIdx_] = true;
+
+    uint32_t imageIdx{};
+    VkResult result =
+        vkAcquireNextImageKHR(device_->get(), swapchain_->get(), UINT64_MAX,
+                              drawSemaphores_[semaphoreIdx_], VK_NULL_HANDLE, &imageIdx);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapChain();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        exitLog("failed to acquire swap chain image!");
+    }
+
+    renderer_->update(frameIdx_, sceneUniform_, skyboxUniform_);
+    rendererPost_->update(frameIdx_, postUniform_);
+    rendererGui_->update(frameIdx_);
+
+    VK_CHECK(vkResetFences(device_->get(), 1, &fences_[frameIdx_]));
+    VK_CHECK(vkResetCommandBuffer(device_->cmdBuffers(frameIdx_), 0));
+
+    VkCommandBuffer cmd = device_->cmdBuffers(frameIdx_);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = nullptr;
+    VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+
+    vkCmdResetQueryPool(cmd, device_->queryPools(frameIdx_), 0, 2);
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, device_->queryPools(frameIdx_), 0);
+
+    renderer_->drawShadow(cmd, frameIdx_, models_);
+    renderer_->draw(cmd, frameIdx_, models_);
+
+    swapchain_->image(imageIdx)->transition(cmd, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    rendererPost_->draw(cmd, frameIdx_, swapchain_->image(imageIdx));
+    rendererGui_->draw(cmd, frameIdx_, swapchain_->image(imageIdx));
+
+    swapchain_->image(imageIdx)->transition(cmd, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                                            VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, device_->queryPools(frameIdx_),
+                        1);
+
+    VK_CHECK(vkEndCommandBuffer(device_->cmdBuffers(frameIdx_)));
+
+    VkSemaphoreSubmitInfo waitSemaphoreSI{};
+    waitSemaphoreSI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    waitSemaphoreSI.semaphore = drawSemaphores_[semaphoreIdx_];
+    waitSemaphoreSI.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    waitSemaphoreSI.value = 0;
+    waitSemaphoreSI.deviceIndex = 0;
+
+    VkSemaphoreSubmitInfo signalSemaphoreSI{};
+    signalSemaphoreSI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    signalSemaphoreSI.semaphore = prsntSemaphores_[semaphoreIdx_];
+    signalSemaphoreSI.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    signalSemaphoreSI.value = 0;
+    signalSemaphoreSI.deviceIndex = 0;
+
+    VkCommandBufferSubmitInfo cmdBufferSI{};
+    cmdBufferSI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cmdBufferSI.commandBuffer = device_->cmdBuffers(frameIdx_);
+    cmdBufferSI.deviceMask = 0;
+
+    VkSubmitInfo2 si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    si.waitSemaphoreInfoCount = 1;
+    si.pWaitSemaphoreInfos = &waitSemaphoreSI;
+    si.commandBufferInfoCount = 1;
+    si.pCommandBufferInfos = &cmdBufferSI;
+    si.signalSemaphoreInfoCount = 1;
+    si.pSignalSemaphoreInfos = &signalSemaphoreSI;
+
+    VK_CHECK(vkQueueSubmit2(device_->queue(), 1, &si, fences_[frameIdx_]));
+
+    VkPresentInfoKHR pi{};
+    pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    pi.waitSemaphoreCount = 1;
+    pi.pWaitSemaphores = &prsntSemaphores_[semaphoreIdx_];
+    pi.swapchainCount = 1;
+    pi.pSwapchains = &swapchain_->get();
+    pi.pImageIndices = &imageIdx;
+    pi.pResults = nullptr;
+
+    result = vkQueuePresentKHR(device_->queue(), &pi);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized_) {
+        resized_ = false;
+        recreateSwapChain();
+    } else if (result != VK_SUCCESS) {
+        exitLog("failed to present swap chain image!");
+    }
+
+    frameIdx_ = (frameIdx_ + 1) % Device::MAX_FRAMES_IN_FLIGHT;
+    semaphoreIdx_ = (semaphoreIdx_ + 1) % swapchain_->size();
 }
 
 } // namespace guk
