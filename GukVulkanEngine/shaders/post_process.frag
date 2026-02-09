@@ -26,7 +26,8 @@ void main()
         vec3 color1 = texture(bloomTexture, inUV).rgb;
 
         color = mix(color0, color1, post.bloomStrength);
-        color = clamp(post.exposure * color, 0.0, 1.0);
+        color *= post.exposure;
+        color = color / (color + vec3(1.0)); // Reinhard Tone Mapping
         color = pow(color, vec3(1.0 / post.gamma));
     } else {
         vec4 ndcPosition;
