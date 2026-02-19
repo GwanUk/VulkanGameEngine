@@ -30,10 +30,10 @@ void ViewFrustum::create(const glm::mat4& vpMat)
     planes_[3].normal.z = vpMat[2][3] - vpMat[2][1],
     planes_[3].distance = vpMat[3][3] - vpMat[3][1];
     // Near plane
-    planes_[4].normal.x = vpMat[0][3] + vpMat[0][2],
-    planes_[4].normal.y = vpMat[1][3] + vpMat[1][2],
-    planes_[4].normal.z = vpMat[2][3] + vpMat[2][2],
-    planes_[4].distance = vpMat[3][3] + vpMat[3][2];
+    planes_[4].normal.x = vpMat[0][2],
+    planes_[4].normal.y = vpMat[1][2],
+    planes_[4].normal.z = vpMat[2][2],
+    planes_[4].distance = vpMat[3][2];
     // Far plane
     planes_[5].normal.x = vpMat[0][3] - vpMat[0][2],
     planes_[5].normal.y = vpMat[1][3] - vpMat[1][2],
